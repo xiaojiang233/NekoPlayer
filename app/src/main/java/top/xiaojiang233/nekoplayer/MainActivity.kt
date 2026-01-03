@@ -10,7 +10,13 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import top.xiaojiang233.nekoplayer.service.connection.MusicServiceConnection
 import top.xiaojiang233.nekoplayer.ui.navigation.AppNavigation
 import top.xiaojiang233.nekoplayer.ui.theme.NekoPlayerTheme
@@ -25,9 +31,9 @@ class MainActivity : ComponentActivity() {
     }
     private val homeViewModel: HomeViewModel by viewModels()
 
-    private val addMusicLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let {
-            homeViewModel.addLocalSong(it)
+    private val addMusicLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            homeViewModel.importSongs(uris)
         }
     }
 
@@ -38,6 +44,21 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
+            val configuration = LocalConfiguration.current
+            val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val view = LocalView.current
+
+            LaunchedEffect(isLandscape) {
+                val window = this@MainActivity.window
+                val insetsController = WindowCompat.getInsetsController(window, view)
+                if (isLandscape) {
+                    insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                    insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                } else {
+                    insetsController.show(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+
             NekoPlayerTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

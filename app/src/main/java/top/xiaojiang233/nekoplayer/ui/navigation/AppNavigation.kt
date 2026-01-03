@@ -19,6 +19,7 @@ object Routes {
     const val SEARCH = "search"
     const val PLAYER = "player"
     const val SETTINGS = "settings"
+    const val PLAYLIST = "playlist/{playlistId}"
 }
 
 @Composable
@@ -37,15 +38,19 @@ fun AppNavigation(
                 onSearchClick = { navController.navigate(Routes.SEARCH) },
                 onPlayerClick = { navController.navigate(Routes.PLAYER) },
                 onSettingsClick = { navController.navigate(Routes.SETTINGS) },
-                onAddMusicClick = onAddMusicClick
+                onAddMusicClick = onAddMusicClick,
+                onPlaylistClick = { playlistId -> navController.navigate("playlist/$playlistId") }
             )
         }
         composable(Routes.SEARCH) {
             SearchScreen(
+                playerViewModel = playerViewModel,
+                onBackClick = { navController.popBackStack() },
                 onSongClick = {
                     playerViewModel.playSong(it)
                     navController.navigate(Routes.PLAYER)
-                }
+                },
+                onPlayerClick = { navController.navigate(Routes.PLAYER) }
             )
         }
         composable(Routes.SETTINGS) {
@@ -69,6 +74,19 @@ fun AppNavigation(
             PlayerScreen(
                 viewModel = playerViewModel,
                 onCloseClick = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Routes.PLAYLIST,
+            arguments = listOf(androidx.navigation.navArgument("playlistId") { type = androidx.navigation.NavType.StringType })
+        ) { backStackEntry ->
+            val playlistId = backStackEntry.arguments?.getString("playlistId") ?: return@composable
+            top.xiaojiang233.nekoplayer.ui.screen.PlaylistScreen(
+                playlistId = playlistId,
+                onBackClick = { navController.popBackStack() },
+                onPlayerClick = { navController.navigate(Routes.PLAYER) },
+                homeViewModel = homeViewModel,
+                playerViewModel = playerViewModel
             )
         }
     }

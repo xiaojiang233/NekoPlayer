@@ -23,6 +23,8 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
 
     val isPlaying = musicServiceConnection.isPlaying
     val nowPlaying = musicServiceConnection.nowPlaying
+    val repeatMode = musicServiceConnection.repeatMode
+    val shuffleMode = musicServiceConnection.shuffleMode
 
     private val _currentPosition = MutableStateFlow(0L)
     val currentPosition = _currentPosition.asStateFlow()
@@ -41,6 +43,18 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
 
     init {
         viewModelScope.launch {
+            nowPlaying.collect { mediaItem ->
+                if (mediaItem != null) {
+                    val extras = mediaItem.mediaMetadata.extras ?: mediaItem.requestMetadata.extras
+                    val lyricUrl = extras?.getString("lyricUrl")
+                    loadLyrics(lyricUrl)
+                } else {
+                    _lyrics.value = emptyList()
+                }
+            }
+        }
+
+        viewModelScope.launch {
             while (true) {
                 val currentPos = player?.currentPosition ?: 0
                 _currentPosition.value = currentPos
@@ -54,64 +68,40 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
                     _currentLyricIndex.value = index
                 }
 
-                delay(100L)
+                delay(50L)
             }
         }
     }
 
     fun playSong(song: OnlineSong) {
-        loadLyrics(song)
+        playPlaylist(listOf(song), 0)
+    }
 
-        val uri = if (song.songUrl?.startsWith("/") == true) {
-            File(song.songUrl).toUri()
-        } else {
-            song.songUrl?.toUri()
-        }
+    fun playPlaylist(songs: List<OnlineSong>, startIndex: Int) {
+        if (songs.isEmpty()) return
+        // Don't load lyrics here manually, let the observer handle it
+        // val song = songs[startIndex]
+        // loadLyrics(song)
 
-        val coverUri = if (song.coverUrl?.startsWith("/") == true) {
-            File(song.coverUrl).toUri()
-        } else {
-            song.coverUrl?.toUri()
-        }
+        val mediaItems = songs.map { createMediaItem(it) }
 
-        val metadata = MediaMetadata.Builder()
-            .setTitle(song.title)
-            .setArtist(song.artist)
-            .setArtworkUri(coverUri)
-            .build()
-
-        val requestMetadata = MediaItem.RequestMetadata.Builder()
-            .setMediaUri(uri)
-            .setExtras(Bundle().apply {
-                putString("title", song.title)
-                putString("artist", song.artist)
-                putString("coverUrl", song.coverUrl)
-            })
-            .build()
-
-        val mediaItem = MediaItem.Builder()
-            .setMediaId(song.id)
-            .setUri(uri)
-            .setMediaMetadata(metadata)
-            .setRequestMetadata(requestMetadata)
-            .build()
-
-        player?.setMediaItem(mediaItem)
+        player?.setMediaItems(mediaItems, startIndex, 0)
         player?.prepare()
         player?.play()
     }
 
 
-    private fun loadLyrics(song: OnlineSong) {
+
+    private fun loadLyrics(lyricUrl: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val lyricsList = if (!song.lyricUrl.isNullOrBlank()) {
-                    if (song.lyricUrl.startsWith("http")) {
-                        val content = URL(song.lyricUrl).readText()
+                val lyricsList = if (!lyricUrl.isNullOrBlank()) {
+                    if (lyricUrl.startsWith("http")) {
+                        val content = URL(lyricUrl).readText()
                         LyricsParser.parse(content)
                     } else {
                         // Handle local file path
-                        val file = File(song.lyricUrl)
+                        val file = File(lyricUrl)
                         if (file.exists()) {
                             LyricsParser.parseFile(file)
                         } else {
@@ -139,6 +129,101 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
 
     fun seekTo(position: Long) {
         player?.seekTo(position)
+    }
+
+    fun skipToNext() {
+        player?.seekToNext()
+    }
+
+    fun skipToPrevious() {
+        player?.seekToPrevious()
+    }
+
+    fun cyclePlaybackMode() {
+        val currentShuffle = player?.shuffleModeEnabled ?: false
+        val currentRepeat = player?.repeatMode ?: androidx.media3.common.Player.REPEAT_MODE_OFF
+
+        if (currentShuffle) {
+            // Current is List Random (Shuffle ON) -> Switch to List Loop
+            player?.shuffleModeEnabled = false
+            player?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
+        } else {
+            when (currentRepeat) {
+                androidx.media3.common.Player.REPEAT_MODE_ALL -> {
+                    // Current is List Loop -> Switch to Single Loop
+                    player?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
+                }
+                androidx.media3.common.Player.REPEAT_MODE_ONE -> {
+                    // Current is Single Loop -> Switch to List Random
+                    player?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
+                    player?.shuffleModeEnabled = true
+                }
+                else -> {
+                    // Current is OFF or unknown -> Switch to List Loop
+                    player?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
+                }
+            }
+        }
+    }
+
+    fun hasPlaylist(): Boolean {
+        return (player?.mediaItemCount ?: 0) > 0
+    }
+
+    fun insertAndPlay(song: OnlineSong) {
+        val player = this.player ?: return
+        val currentMediaItemIndex = player.currentMediaItemIndex
+        val nextIndex = if (currentMediaItemIndex < 0) 0 else currentMediaItemIndex + 1
+
+        val mediaItem = createMediaItem(song)
+        player.addMediaItem(nextIndex, mediaItem)
+        player.seekTo(nextIndex, 0)
+        player.play()
+    }
+
+    private fun createMediaItem(s: OnlineSong): MediaItem {
+        val uri = if (s.songUrl?.startsWith("/") == true) {
+            File(s.songUrl).toUri()
+        } else {
+            s.songUrl?.toUri()
+        }
+
+        val coverUri = if (s.coverUrl?.startsWith("/") == true) {
+            File(s.coverUrl).toUri()
+        } else {
+            s.coverUrl?.toUri()
+        }
+
+        val metadata = MediaMetadata.Builder()
+            .setTitle(s.title)
+            .setArtist(s.artist)
+            .setArtworkUri(coverUri)
+            .setExtras(Bundle().apply {
+                putString("title", s.title)
+                putString("artist", s.artist)
+                putString("coverUrl", s.coverUrl)
+                putString("platform", s.platform)
+                putString("lyricUrl", s.lyricUrl)
+            })
+            .build()
+
+        val requestMetadata = MediaItem.RequestMetadata.Builder()
+            .setMediaUri(uri)
+            .setExtras(Bundle().apply {
+                putString("title", s.title)
+                putString("artist", s.artist)
+                putString("coverUrl", s.coverUrl)
+                putString("platform", s.platform)
+                putString("lyricUrl", s.lyricUrl)
+            })
+            .build()
+
+        return MediaItem.Builder()
+            .setMediaId(s.id)
+            .setUri(uri)
+            .setMediaMetadata(metadata)
+            .setRequestMetadata(requestMetadata)
+            .build()
     }
 
     override fun onCleared() {

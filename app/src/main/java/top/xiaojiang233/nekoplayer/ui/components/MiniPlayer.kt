@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -27,7 +28,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.media3.common.MediaItem
@@ -48,6 +51,9 @@ fun MiniPlayer(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
     var backgroundColor by remember { mutableStateOf(Color.Gray) }
     var contentColor by remember { mutableStateOf(Color.White) }
 
@@ -83,7 +89,7 @@ fun MiniPlayer(
     if (nowPlaying != null) {
         Row(
             modifier = modifier
-                .fillMaxWidth()
+                .then(if (isLandscape) Modifier.widthIn(max = 400.dp) else Modifier.fillMaxWidth())
                 .padding(16.dp)
                 .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp))
                 .clip(RoundedCornerShape(16.dp))
@@ -92,22 +98,33 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 AsyncImage(
                     model = displayAlbumArt,
                     contentDescription = "Album Art",
                     modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
                 )
-                Column(modifier = Modifier.padding(start = 12.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .weight(1f)
+                ) {
                     Text(
                         text = nowPlaying.mediaMetadata.title.toString(),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = contentColor
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = nowPlaying.mediaMetadata.artist.toString(),
                         style = MaterialTheme.typography.bodySmall,
-                        color = contentColor.copy(alpha = 0.7f)
+                        color = contentColor.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

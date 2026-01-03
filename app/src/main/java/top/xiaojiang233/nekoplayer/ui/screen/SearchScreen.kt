@@ -3,6 +3,8 @@ package top.xiaojiang233.nekoplayer.ui.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,9 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Search
@@ -24,40 +28,94 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.repository.SongRepository
+import top.xiaojiang233.nekoplayer.ui.components.MiniPlayer
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.SearchViewModel
 
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import top.xiaojiang233.nekoplayer.util.findActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     searchViewModel: SearchViewModel = viewModel(),
-    onSongClick: (OnlineSong) -> Unit
+    playerViewModel: PlayerViewModel,
+    onBackClick: () -> Unit,
+    onSongClick: (OnlineSong) -> Unit,
+    onPlayerClick: () -> Unit
 ) {
     val searchQuery by searchViewModel.searchQuery.collectAsState()
-    val searchResults by searchViewModel.searchResults.collectAsState()
+    val groupedSearchResults by searchViewModel.groupedSearchResults.collectAsState()
     val isLoading by searchViewModel.isLoading.collectAsState()
     val downloadState by searchViewModel.downloadState.collectAsState()
+    val searchHistory by searchViewModel.searchHistory.collectAsState()
+    val selectedPlatforms by searchViewModel.selectedPlatforms.collectAsState()
+    val isPlaying by playerViewModel.isPlaying.collectAsState()
+    val nowPlaying by playerViewModel.nowPlaying.collectAsState()
+    val listState = rememberLazyListState()
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+
+    LaunchedEffect(listState, isLoading, groupedSearchResults.size) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .collect { lastIndex ->
+                if (lastIndex != null && lastIndex >= groupedSearchResults.size - 2 && !isLoading && groupedSearchResults.isNotEmpty()) {
+                    searchViewModel.loadMore()
+                }
+            }
+    }
+    val view = LocalView.current
+    DisposableEffect(isLandscape) {
+        val window = view.context.findActivity()?.window
+        if (window != null) {
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            if (isLandscape) {
+                insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {
+            val window = view.context.findActivity()?.window
+            if (window != null) {
+                val insetsController = WindowCompat.getInsetsController(window, view)
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         Spacer(modifier = Modifier.height(12.dp))
         // Custom Search Bar
@@ -69,12 +127,15 @@ fun SearchScreen(
                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(24.dp)),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = onBackClick) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
             BasicTextField(
                 value = searchQuery,
                 onValueChange = { searchViewModel.onSearchQueryChange(it) },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
                 singleLine = true,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { innerTextField ->
@@ -91,65 +152,217 @@ fun SearchScreen(
             }
         }
 
-        if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.padding(16.dp).align(Alignment.CenterHorizontally))
-        } else if (searchResults.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "Find your favorite songs",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        // Platform Filter
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("netease", "qq", "kuwo").forEach { platform ->
+                FilterChip(
+                    selected = platform in selectedPlatforms,
+                    onClick = { searchViewModel.togglePlatform(platform) },
+                    label = { Text(platform) }
                 )
             }
-        } else {
-            LazyColumn(modifier = Modifier.padding(horizontal = 8.dp)) {
-                items(searchResults) { song ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable { onSongClick(song) },
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        ListItem(
-                            headlineContent = { Text(song.title) },
-                            supportingContent = { Text(song.artist) },
-                            leadingContent = {
-                                AsyncImage(
-                                    model = song.coverUrl,
-                                    contentDescription = song.title,
-                                    contentScale = ContentScale.Crop,
+        }
+
+        Box(modifier = Modifier.weight(1f)) {
+            if (isLoading && groupedSearchResults.isEmpty()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else if (groupedSearchResults.isEmpty()) {
+                if (searchHistory.isNotEmpty()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Search History", style = MaterialTheme.typography.titleMedium)
+                            IconButton(onClick = { searchViewModel.clearHistory() }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Clear History")
+                            }
+                        }
+                        // Use FlowRow if available or simple Column/Row for history
+                        // Since FlowRow is experimental/new, let's use a simple column of rows or just a column
+                        // Or a LazyRow if we want horizontal scrolling
+                        // Let's use a simple vertical list for history
+                        LazyColumn {
+                            items(searchHistory) { historyItem ->
+                                Row(
                                     modifier = Modifier
-                                        .size(56.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                )
-                            },
-                            trailingContent = {
-                                val state = downloadState[song.id] ?: SongRepository.DownloadState.None
-                                when (state) {
-                                    is SongRepository.DownloadState.None -> {
-                                        IconButton(onClick = { searchViewModel.downloadSong(song) }) {
-                                            Icon(Icons.Default.Download, contentDescription = "Download")
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            searchViewModel.onSearchQueryChange(historyItem)
+                                            searchViewModel.searchSongs()
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.size(16.dp))
+                                    Text(historyItem)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "Find your favorite songs",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = if (isLandscape) 16.dp else 80.dp)
+                ) {
+                    items(groupedSearchResults) { group ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    if (group.songs.isNotEmpty()) {
+                                        val song = group.songs.random()
+                                        if (playerViewModel.hasPlaylist()) {
+                                            playerViewModel.insertAndPlay(song)
+                                        } else {
+                                            val allSongs = groupedSearchResults.flatMap { it.songs }
+                                            val index = allSongs.indexOf(song)
+                                            if (index != -1) {
+                                                playerViewModel.playPlaylist(allSongs, index)
+                                            } else {
+                                                playerViewModel.playSong(song)
+                                            }
+                                        }
+                                        onPlayerClick()
+                                    }
+                                },
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            ListItem(
+                                headlineContent = { Text(group.title) },
+                                supportingContent = {
+                                    Column {
+                                        Text(group.artist)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            group.songs.forEach { song ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .background(getPlatformColor(song.platform), RoundedCornerShape(4.dp))
+                                                        .clickable { onSongClick(song) }
+                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                ) {
+                                                    Text(
+                                                        text = song.platform,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
-                                    is SongRepository.DownloadState.Downloading -> {
-                                        CircularProgressIndicator(
-                                            progress = { state.progress },
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                    }
-                                    is SongRepository.DownloadState.Downloaded -> {
-                                        IconButton(onClick = { searchViewModel.deleteSong(song) }) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                                },
+                                leadingContent = {
+                                    AsyncImage(
+                                        model = group.coverUrl,
+                                        contentDescription = group.title,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                    )
+                                },
+                                trailingContent = {
+                                    val song = group.songs.firstOrNull()
+                                    if (song != null) {
+                                        val state = downloadState[song.id] ?: SongRepository.DownloadState.None
+                                        when (state) {
+                                            is SongRepository.DownloadState.None -> {
+                                                IconButton(onClick = { searchViewModel.downloadSong(song) }) {
+                                                    Icon(Icons.Default.Download, contentDescription = "Download")
+                                                }
+                                            }
+                                            is SongRepository.DownloadState.Downloading -> {
+                                                CircularProgressIndicator(
+                                                    progress = { state.progress },
+                                                    modifier = Modifier.size(24.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                            }
+                                            is SongRepository.DownloadState.Downloaded -> {
+                                                IconButton(onClick = { searchViewModel.deleteSong(song) }) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                                                }
+                                            }
                                         }
                                     }
                                 }
+                            )
+                        }
+                    }
+
+                    if (isLoading) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
                             }
+                        }
+                    }
+                }
+            }
+
+            if (nowPlaying != null) {
+                if (isLandscape) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .width(300.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onPlayerClick() }
+                    ) {
+                        MiniPlayer(
+                            isPlaying = isPlaying,
+                            nowPlaying = nowPlaying,
+                            onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
+                } else {
+                    MiniPlayer(
+                        isPlaying = isPlaying,
+                        nowPlaying = nowPlaying,
+                        onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .clickable { onPlayerClick() }
+                    )
                 }
             }
         }
     }
 }
+
+fun getPlatformColor(platform: String): Color {
+    return when (platform.lowercase()) {
+        "netease" -> Color(0xFFC20C0C)
+        "qq" -> Color(0xFFFFEB3B)
+        "kuwo" -> Color(0xFF2196F3)
+        else -> Color.Gray
+    }
+}
+

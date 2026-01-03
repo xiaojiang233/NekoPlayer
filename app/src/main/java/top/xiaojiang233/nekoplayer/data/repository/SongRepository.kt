@@ -1,5 +1,7 @@
 package top.xiaojiang233.nekoplayer.data.repository
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Environment
@@ -46,6 +48,8 @@ object SongRepository {
     private val _downloadState = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
     val downloadState = _downloadState.asStateFlow()
 
+    private val localSongsOrderFile = File(downloadsDir, "order.json")
+
     init {
         refreshLocalSongsState()
     }
@@ -54,6 +58,21 @@ object SongRepository {
         val localSongs = getLocalSongs()
         val stateMap = localSongs.associate { it.id to DownloadState.Downloaded }
         _downloadState.value = stateMap
+    }
+
+    private fun saveLocalSongsOrder(songs: List<OnlineSong>) {
+        if (!downloadsDir.exists()) downloadsDir.mkdirs()
+        val ids = songs.map { it.id }
+        localSongsOrderFile.writeText(json.encodeToString(ids))
+    }
+
+    private fun getLocalSongsOrder(): List<String> {
+        if (!localSongsOrderFile.exists()) return emptyList()
+        return try {
+            json.decodeFromString<List<String>>(localSongsOrderFile.readText())
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     fun addLocalSong(uri: Uri) {
@@ -125,8 +144,8 @@ object SongRepository {
                     extension = "mp3"
                 }
 
-                val safeTitle = song.title.replace("[\\\\/:*?\"<>|]".toRegex(), "_").trim()
-                val safeArtist = song.artist.replace("[\\\\/:*?\"<>|]".toRegex(), "_").trim()
+                val safeTitle = song.title.replace("[\\\\/:*?\"<>|]".toRegex(), "_").trim().trimEnd('.')
+                val safeArtist = song.artist.replace("[\\\\/:*?\"<>|]".toRegex(), "_").trim().trimEnd('.')
                 val songFileName = "$safeTitle - $safeArtist.$extension"
 
                 val songFile = File(publicMusicDir, songFileName)
@@ -135,8 +154,9 @@ object SongRepository {
                 var url = URL(song.songUrl)
                 var connection = url.openConnection() as HttpURLConnection
                 var redirects = 0
-                while (redirects < 10) {
+                while (redirects < 20) {
                     connection.instanceFollowRedirects = false // Handle redirects manually
+                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
                     connection.connect()
                     val responseCode = connection.responseCode
                     if (responseCode in 300..399) {
@@ -189,10 +209,18 @@ object SongRepository {
                 var coverFile: File? = null
                 if (!song.coverUrl.isNullOrBlank()) {
                     coverFile = File(NekoPlayerApplication.getAppContext().cacheDir, "${song.id}.jpg")
-                    URL(song.coverUrl).openStream().use { input ->
-                        coverFile.outputStream().use { output ->
-                            input.copyTo(output)
+                    try {
+                        URL(song.coverUrl).openStream().use { input ->
+                            val bitmap = BitmapFactory.decodeStream(input)
+                            if (bitmap != null) {
+                                coverFile.outputStream().use { output ->
+                                    bitmap.compress(Bitmap.CompressFormat.JPEG, 70, output) // Compress to 70% quality
+                                }
+                                bitmap.recycle()
+                            }
                         }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                 }
 
@@ -202,7 +230,9 @@ object SongRepository {
                 if (!song.lyricUrl.isNullOrBlank()) {
                     if (song.lyricUrl.startsWith("http")) {
                         lyricsContent = URL(song.lyricUrl).readText()
-                        val lrcFileName = "${song.title} - ${song.artist}.lrc".replace("[\\\\/:*?\"<>|]".toRegex(), "_")
+                        val safeTitle = song.title.replace("[\\\\/:*?\"<>|]".toRegex(), "_").trim().trimEnd('.')
+                        val safeArtist = song.artist.replace("[\\\\/:*?\"<>|]".toRegex(), "_").trim().trimEnd('.')
+                        val lrcFileName = "$safeTitle - $safeArtist.lrc"
                         lrcFile = File(publicLyricDir, lrcFileName)
                         lrcFile.writeText(lyricsContent)
                     }
@@ -238,6 +268,7 @@ object SongRepository {
 
                 // Save metadata JSON for app logic (pointing to local file)
                 val songWithLocalPaths = song.copy(
+                    platform = "local",
                     songUrl = songFile.absolutePath,
                     coverUrl = null, // Embedded
                     lyricUrl = lrcFile?.absolutePath // Point to local LRC file
@@ -289,26 +320,49 @@ object SongRepository {
     fun getLocalSongs(): List<OnlineSong> {
         if (!downloadsDir.exists()) return emptyList()
 
-        return downloadsDir.listFiles { _, name -> name.endsWith(".json") }?.mapNotNull {
+        val songs = downloadsDir.listFiles { _, name -> name.endsWith(".json") && name != "order.json" }?.mapNotNull {
             try {
                 json.decodeFromStream<OnlineSong>(it.inputStream())
             } catch (_: Exception) {
                 null
             }
-        }?.sortedBy { it.title } ?: emptyList()
+        } ?: emptyList()
+
+        val order = getLocalSongsOrder()
+        if (order.isEmpty()) {
+            return songs.sortedBy { it.title }
+        }
+
+        val songMap = songs.associateBy { it.id }
+        val orderedSongs = order.mapNotNull { songMap[it] }
+        val unorderedSongs = songs.filter { it.id !in order }.sortedBy { it.title }
+
+        return orderedSongs + unorderedSongs
+    }
+
+    fun updateLocalSongsOrder(songs: List<OnlineSong>) {
+        saveLocalSongsOrder(songs)
+    }
+
+    fun saveSongs(songs: List<OnlineSong>) {
+        if (!downloadsDir.exists()) downloadsDir.mkdirs()
+        songs.forEach { song ->
+            val file = File(downloadsDir, "${song.id}.json")
+            file.writeText(json.encodeToString(song))
+        }
+        refreshLocalSongsState()
     }
 
     fun clearCache() {
         val context = NekoPlayerApplication.getAppContext()
         val httpCacheDirectory = File(context.cacheDir, "http-cache")
-        httpCacheDirectory.deleteRecursively()
-
-        if (downloadsDir.exists()) {
-            downloadsDir.deleteRecursively()
+        if (httpCacheDirectory.exists()) {
+            httpCacheDirectory.deleteRecursively()
         }
 
-        context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)?.deleteRecursively()
-        context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)?.deleteRecursively()
-        context.getExternalFilesDir("lyrics")?.deleteRecursively()
+        val imageCacheDirectory = File(context.cacheDir, "image_cache")
+        if (imageCacheDirectory.exists()) {
+            imageCacheDirectory.deleteRecursively()
+        }
     }
 }

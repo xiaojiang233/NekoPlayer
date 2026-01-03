@@ -17,6 +17,8 @@ class MusicServiceConnection private constructor(context: Context) {
     val nowPlaying = MutableStateFlow<MediaItem?>(null)
     val playbackState = MutableStateFlow(Player.STATE_IDLE)
     val isPlaying = MutableStateFlow(false)
+    val repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
+    val shuffleMode = MutableStateFlow(false)
 
     private var mediaBrowser: MediaBrowser? = null
 
@@ -29,6 +31,12 @@ class MusicServiceConnection private constructor(context: Context) {
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             nowPlaying.value = mediaItem
+        }
+        override fun onRepeatModeChanged(mode: Int) {
+            repeatMode.value = mode
+        }
+        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+            shuffleMode.value = shuffleModeEnabled
         }
     }
 
@@ -44,6 +52,8 @@ class MusicServiceConnection private constructor(context: Context) {
                 nowPlaying.value = mediaBrowser?.currentMediaItem
                 playbackState.value = mediaBrowser?.playbackState ?: Player.STATE_IDLE
                 isPlaying.value = mediaBrowser?.isPlaying ?: false
+                repeatMode.value = mediaBrowser?.repeatMode ?: Player.REPEAT_MODE_OFF
+                shuffleMode.value = mediaBrowser?.shuffleModeEnabled ?: false
             },
             MoreExecutors.directExecutor()
         )
@@ -65,7 +75,7 @@ class MusicServiceConnection private constructor(context: Context) {
 
         fun getInstance(context: Context) =
             instance ?: synchronized(this) {
-                instance ?: MusicServiceConnection(context).also { instance = it }
+                instance ?: MusicServiceConnection(context.applicationContext).also { instance = it }
             }
     }
 }
