@@ -29,7 +29,6 @@ fun AppNavigation(
     onAddMusicClick: () -> Unit
 ) {
     val navController = rememberNavController()
-
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(

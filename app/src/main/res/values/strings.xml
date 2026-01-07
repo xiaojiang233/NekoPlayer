@@ -1,3 +1,75 @@
 <resources>
     <string name="app_name">NekoPlayer</string>
+
+    <!-- PlaylistScreen -->
+    <string name="playlist_not_found">Playlist not found</string>
+    <string name="go_back">Go Back</string>
+    <string name="add_songs">Add Songs</string>
+    <string name="no_songs_available">No songs available to add.</string>
+    <string name="add">Add</string>
+    <string name="cancel">Cancel</string>
+    <string name="selected_count">%1$d Selected</string>
+    <string name="close_selection">Close Selection</string>
+    <string name="back">Back</string>
+    <string name="remove_selected">Remove Selected</string>
+    <string name="play_all">Play All</string>
+    <string name="song_count">%1$d songs</string>
+    <string name="drag_handle">Drag Handle</string>
+    <string name="cover_image">Cover Image</string>
+
+    <!-- HomeScreen -->
+    <string name="new_playlist">New Playlist</string>
+    <string name="playlist_name">Playlist Name</string>
+    <string name="create">Create</string>
+    <string name="rename_playlist">Rename Playlist</string>
+    <string name="name">Name</string>
+    <string name="rename">Rename</string>
+    <string name="delete">Delete</string>
+    <string name="import_songs">Import Songs</string>
+    <string name="toggle_view">Toggle View</string>
+    <string name="settings">Settings</string>
+    <string name="playlists_title">Playlists</string>
+    <string name="songs_title">Songs</string>
+    <string name="delete_selected">Delete Selected</string>
+    <string name="delete_playlist_message">Are you sure you want to delete "%1$s"?</string>
+    <string name="drag">Drag</string>
+
+     <!-- Generic -->
+    <string name="unknown_artist">Unknown Artist</string>
+    <string name="unknown_title">Unknown Title</string>
+    <string name="search">Search</string>
+    <string name="search_hint">Search for songs</string>
+    <string name="search_history">Search History</string>
+    <string name="clear_history">Clear History</string>
+    <string name="find_favorite_songs">Find your favorite songs</string>
+    <string name="download">Download</string>
+    <string name="lyrics">Lyrics</string>
+
+    <!-- Settings -->
+    <string name="title_settings">Settings</string>
+    <string name="clear_cache">Clear Cache</string>
+    <string name="clear_cache_desc">Clear downloaded songs and images</string>
+    <string name="cache_cleared">Cache cleared</string>
+    <string name="title_lyrics">Lyrics</string>
+    <string name="font_size">Font Size: %1$d sp</string>
+    <string name="font_family">Font Family</string>
+    <string name="blur_intensity">Blur Intensity: %1$d</string>
+    <string name="title_player">Player</string>
+    <string name="show_platform_tag">Show Platform Tag</string>
+    <string name="show_platform_tag_desc">Show platform tag under artist name in player</string>
+    <string name="title_backup_restore">Backup &amp; Restore</string>
+    <string name="export_config">Export Configuration</string>
+    <string name="export_config_desc">Save settings, songs, and playlists</string>
+    <string name="import_config">Import Configuration</string>
+    <string name="import_config_desc">Restore from backup file</string>
+    <string name="config_exported_success">Configuration exported successfully</string>
+    <string name="config_export_failed">Export failed: %1$s</string>
+    <string name="config_imported_success">Configuration imported successfully</string>
+    <string name="config_import_failed">Import failed: %1$s</string>
+    <string name="import_failed_file_error">Import failed: Unable to read file</string>
+    <string name="imported_to_library">Imported to Library</string>
+    <string name="import_song_failed">Failed to import song</string>
+    <string name="no_url">No URL</string>
+    <string name="downloaded_song">Downloaded \'%1$s\'</string>
+    <string name="download_failed_msg">Download failed: %1$s</string>
 </resources>

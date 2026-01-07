@@ -1,5 +1,6 @@
 package top.xiaojiang233.nekoplayer
 
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -7,18 +8,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.runtime.Composable
+import androidx.wear.compose.material.MaterialTheme as WearMaterialTheme
 import top.xiaojiang233.nekoplayer.service.connection.MusicServiceConnection
 import top.xiaojiang233.nekoplayer.ui.navigation.AppNavigation
+import top.xiaojiang233.nekoplayer.ui.navigation.WearAppNavigation
 import top.xiaojiang233.nekoplayer.ui.theme.NekoPlayerTheme
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
@@ -42,28 +36,23 @@ class MainActivity : ComponentActivity() {
 
         musicServiceConnection = MusicServiceConnection.getInstance(this)
 
-        enableEdgeToEdge()
+        val isWearable = packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH)
+
+        if (!isWearable) {
+            enableEdgeToEdge()
+        }
+
         setContent {
-            val configuration = LocalConfiguration.current
-            val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            val view = LocalView.current
-
-            LaunchedEffect(isLandscape) {
-                val window = this@MainActivity.window
-                val insetsController = WindowCompat.getInsetsController(window, view)
-                if (isLandscape) {
-                    insetsController.hide(WindowInsetsCompat.Type.systemBars())
-                    insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                } else {
-                    insetsController.show(WindowInsetsCompat.Type.systemBars())
+            if (isWearable) {
+                WearMaterialTheme {
+                    WearApp(
+                        playerViewModel = playerViewModel,
+                        homeViewModel = homeViewModel,
+                        onAddMusicClick = { addMusicLauncher.launch("audio/*") }
+                    )
                 }
-            }
-
-            NekoPlayerTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
+            } else {
+                NekoPlayerTheme {
                     AppNavigation(
                         playerViewModel = playerViewModel,
                         homeViewModel = homeViewModel,
@@ -73,4 +62,17 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+@Composable
+fun WearApp(
+    playerViewModel: PlayerViewModel,
+    homeViewModel: HomeViewModel,
+    onAddMusicClick: () -> Unit
+) {
+    WearAppNavigation(
+        playerViewModel = playerViewModel,
+        homeViewModel = homeViewModel,
+        onAddMusicClick = onAddMusicClick
+    )
 }

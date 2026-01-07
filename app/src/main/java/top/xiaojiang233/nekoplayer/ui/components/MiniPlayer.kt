@@ -1,13 +1,8 @@
 package top.xiaojiang233.nekoplayer.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -16,18 +11,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,17 +39,18 @@ fun MiniPlayer(
     isPlaying: Boolean,
     nowPlaying: MediaItem?,
     onPlayPauseClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDismiss: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val isWearable = configuration.screenWidthDp < 300
 
     var backgroundColor by remember { mutableStateOf(Color.Gray) }
     var contentColor by remember { mutableStateOf(Color.White) }
 
-    // Fallback for album art if it's a local file without explicit artwork URI in metadata
-    val displayAlbumArt = nowPlaying?.mediaMetadata?.artworkUri ?: nowPlaying?.mediaId?.let { id ->
+    val displayAlbumArt = nowPlaying?.mediaMetadata?.artworkUri ?: nowPlaying?.mediaId?.let { _ ->
         nowPlaying.requestMetadata.mediaUri?.let { uri ->
             if (uri.scheme == "file") File(uri.path ?: "") else null
         }
@@ -87,53 +79,141 @@ fun MiniPlayer(
     }
 
     if (nowPlaying != null) {
-        Row(
-            modifier = modifier
-                .then(if (isLandscape) Modifier.widthIn(max = 400.dp) else Modifier.fillMaxWidth())
-                .padding(16.dp)
-                .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp))
-                .clip(RoundedCornerShape(16.dp))
-                .background(backgroundColor)
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
+        if (isWearable) {
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) }
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
-                    model = displayAlbumArt,
-                    contentDescription = "Album Art",
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
-                )
-                Column(
+                Row(
                     modifier = Modifier
-                        .padding(start = 12.dp)
-                        .weight(1f)
+                        .wrapContentWidth()
+                        .clip(RoundedCornerShape(50.dp))
+                        .background(backgroundColor.copy(alpha = 0.85f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    AsyncImage(
+                        model = displayAlbumArt,
+                        contentDescription = "Album Art",
+                        modifier = Modifier.size(36.dp).clip(RoundedCornerShape(50.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = nowPlaying.mediaMetadata.title.toString(),
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = contentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = nowPlaying.mediaMetadata.artist.toString(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = contentColor.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(onClick = onPlayPauseClick) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = contentColor
+                        )
+                    }
                 }
             }
-            IconButton(onClick = onPlayPauseClick) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = contentColor
-                )
+        } else if (isLandscape) {
+            Box(modifier = modifier.fillMaxSize().padding(16.dp)) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .widthIn(max = 400.dp)
+                        .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(backgroundColor)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(
+                        model = displayAlbumArt,
+                        contentDescription = "Album Art",
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+                    )
+                    Column(
+                        modifier = Modifier
+                            .padding(start = 12.dp)
+                            .weight(1f)
+                    ) {
+                        Text(
+                            text = nowPlaying.mediaMetadata.title.toString(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = nowPlaying.mediaMetadata.artist.toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(onClick = onPlayPauseClick) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = contentColor
+                        )
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(backgroundColor)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(
+                        model = displayAlbumArt,
+                        contentDescription = "Album Art",
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+                    )
+                    Column(
+                        modifier = Modifier
+                            .padding(start = 12.dp)
+                            .weight(1f)
+                    ) {
+                        Text(
+                            text = nowPlaying.mediaMetadata.title.toString(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = nowPlaying.mediaMetadata.artist.toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                IconButton(onClick = onPlayPauseClick) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = contentColor
+                    )
+                }
             }
         }
     }

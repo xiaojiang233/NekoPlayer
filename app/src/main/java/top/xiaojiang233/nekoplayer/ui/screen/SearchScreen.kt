@@ -4,19 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -24,20 +16,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,25 +25,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.repository.SongRepository
 import top.xiaojiang233.nekoplayer.ui.components.MiniPlayer
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.SearchViewModel
-
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import top.xiaojiang233.nekoplayer.util.findActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,10 +55,6 @@ fun SearchScreen(
     val nowPlaying by playerViewModel.nowPlaying.collectAsState()
     val listState = rememberLazyListState()
 
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-
-
     LaunchedEffect(listState, isLoading, groupedSearchResults.size) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
             .collect { lastIndex ->
@@ -96,80 +63,69 @@ fun SearchScreen(
                 }
             }
     }
-    val view = LocalView.current
-    DisposableEffect(isLandscape) {
-        val window = view.context.findActivity()?.window
-        if (window != null) {
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            if (isLandscape) {
-                insetsController.hide(WindowInsetsCompat.Type.systemBars())
-                insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-        onDispose {
-            val window = view.context.findActivity()?.window
-            if (window != null) {
-                val insetsController = WindowCompat.getInsetsController(window, view)
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        Spacer(modifier = Modifier.height(12.dp))
-        // Custom Search Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(24.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(24.dp)),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBackClick) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = { searchViewModel.onSearchQueryChange(it) },
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                singleLine = true,
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                decorationBox = { innerTextField ->
-                    Box(contentAlignment = Alignment.CenterStart) {
-                        if (searchQuery.isEmpty()) {
-                            Text("Search for songs", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+    Scaffold(
+        topBar = {
+            Column {
+                Spacer(modifier = Modifier.height(12.dp))
+                // Custom Search Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(24.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(24.dp)),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                    }
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchViewModel.onSearchQueryChange(it) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp, vertical = 12.dp),
+                        singleLine = true,
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(stringResource(R.string.search_hint), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                innerTextField()
+                            }
                         }
-                        innerTextField()
+                    )
+                    IconButton(onClick = { searchViewModel.searchSongs() }) {
+                        Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search))
                     }
                 }
-            )
-            IconButton(onClick = { searchViewModel.searchSongs() }) {
-                Icon(Icons.Default.Search, contentDescription = "Search")
+
+                // Platform Filter
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("netease", "qq", "kuwo").forEach { platform ->
+                        FilterChip(
+                            selected = platform in selectedPlatforms,
+                            onClick = { searchViewModel.togglePlatform(platform) },
+                            label = { Text(platform) }
+                        )
+                    }
+                }
             }
         }
-
-        // Platform Filter
-        Row(
+    ) { paddingValues ->
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxSize()
+                .padding(paddingValues)
         ) {
-            listOf("netease", "qq", "kuwo").forEach { platform ->
-                FilterChip(
-                    selected = platform in selectedPlatforms,
-                    onClick = { searchViewModel.togglePlatform(platform) },
-                    label = { Text(platform) }
-                )
-            }
-        }
-
-        Box(modifier = Modifier.weight(1f)) {
             if (isLoading && groupedSearchResults.isEmpty()) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (groupedSearchResults.isEmpty()) {
@@ -180,15 +136,11 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Search History", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.search_history), style = MaterialTheme.typography.titleMedium)
                             IconButton(onClick = { searchViewModel.clearHistory() }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Clear History")
+                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.clear_history))
                             }
                         }
-                        // Use FlowRow if available or simple Column/Row for history
-                        // Since FlowRow is experimental/new, let's use a simple column of rows or just a column
-                        // Or a LazyRow if we want horizontal scrolling
-                        // Let's use a simple vertical list for history
                         LazyColumn {
                             items(searchHistory) { historyItem ->
                                 Row(
@@ -211,7 +163,7 @@ fun SearchScreen(
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "Find your favorite songs",
+                            text = stringResource(R.string.find_favorite_songs),
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
@@ -221,7 +173,7 @@ fun SearchScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = if (isLandscape) 16.dp else 80.dp)
+                    contentPadding = PaddingValues(bottom = if (nowPlaying != null) 80.dp else 0.dp)
                 ) {
                     items(groupedSearchResults) { group ->
                         Card(
@@ -288,7 +240,7 @@ fun SearchScreen(
                                         when (state) {
                                             is SongRepository.DownloadState.None -> {
                                                 IconButton(onClick = { searchViewModel.downloadSong(song) }) {
-                                                    Icon(Icons.Default.Download, contentDescription = "Download")
+                                                    Icon(Icons.Default.Download, contentDescription = stringResource(R.string.download))
                                                 }
                                             }
                                             is SongRepository.DownloadState.Downloading -> {
@@ -300,7 +252,7 @@ fun SearchScreen(
                                             }
                                             is SongRepository.DownloadState.Downloaded -> {
                                                 IconButton(onClick = { searchViewModel.deleteSong(song) }) {
-                                                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
                                                 }
                                             }
                                         }
@@ -324,34 +276,15 @@ fun SearchScreen(
                     }
                 }
             }
-
             if (nowPlaying != null) {
-                if (isLandscape) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp)
-                            .width(300.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onPlayerClick() }
-                    ) {
-                        MiniPlayer(
-                            isPlaying = isPlaying,
-                            nowPlaying = nowPlaying,
-                            onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                } else {
-                    MiniPlayer(
-                        isPlaying = isPlaying,
-                        nowPlaying = nowPlaying,
-                        onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .clickable { onPlayerClick() }
-                    )
-                }
+                MiniPlayer(
+                    isPlaying = isPlaying,
+                    nowPlaying = nowPlaying,
+                    onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .clickable { onPlayerClick() }
+                )
             }
         }
     }
@@ -365,4 +298,3 @@ fun getPlatformColor(platform: String): Color {
         else -> Color.Gray
     }
 }
-

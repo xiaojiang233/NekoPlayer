@@ -21,6 +21,7 @@ import top.xiaojiang233.nekoplayer.data.repository.PlaylistRepository
 import top.xiaojiang233.nekoplayer.data.repository.SongRepository
 import top.xiaojiang233.nekoplayer.data.repository.SettingsRepository
 import java.io.File
+import top.xiaojiang233.nekoplayer.R
 
 @Serializable
 data class BackupData(
@@ -79,7 +80,7 @@ class SettingsViewModel : ViewModel() {
         }
     }
 
-    fun exportConfiguration() {
+    fun exportConfiguration(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val songs = songRepository.getLocalSongs()
@@ -89,50 +90,46 @@ class SettingsViewModel : ViewModel() {
                 val backupData = BackupData(songs, playlists, settings)
                 val jsonString = json.encodeToString(backupData)
 
-                val downloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "NekoMusic")
-                if (!downloadDir.exists()) downloadDir.mkdirs()
-                val backupFile = File(downloadDir, "backup.json")
-                backupFile.writeText(jsonString)
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(jsonString.toByteArray())
+                }
 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Configuration exported to ${backupFile.absolutePath}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.getString(R.string.config_exported_success), Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.config_export_failed, e.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
-    fun importConfiguration() {
+    fun importConfiguration(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val downloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "NekoMusic")
-                val backupFile = File(downloadDir, "backup.json")
+                val jsonString = context.contentResolver.openInputStream(uri)?.bufferedReader().use { it?.readText() }
 
-                if (!backupFile.exists()) {
+                if (jsonString != null) {
+                    val backupData = json.decodeFromString<BackupData>(jsonString)
+
+                    songRepository.saveSongs(backupData.songs)
+                    playlistRepository.savePlaylists(backupData.playlists)
+                    settingsRepository.restoreSettings(backupData.settings)
+
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Backup file not found", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.config_imported_success), Toast.LENGTH_SHORT).show()
                     }
-                    return@launch
-                }
-
-                val jsonString = backupFile.readText()
-                val backupData = json.decodeFromString<BackupData>(jsonString)
-
-                songRepository.saveSongs(backupData.songs)
-                playlistRepository.savePlaylists(backupData.playlists)
-                settingsRepository.restoreSettings(backupData.settings)
-
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Configuration imported successfully", Toast.LENGTH_SHORT).show()
+                } else {
+                     withContext(Dispatchers.Main) {
+                        Toast.makeText(context, context.getString(R.string.import_failed_file_error), Toast.LENGTH_SHORT).show()
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.config_import_failed, e.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }

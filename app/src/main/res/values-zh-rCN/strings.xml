@@ -1,0 +1,75 @@
+<resources>
+    <string name="app_name">NekoPlayer</string>
+
+    <!-- PlaylistScreen -->
+    <string name="playlist_not_found">未找到播放列表</string>
+    <string name="go_back">返回</string>
+    <string name="add_songs">添加歌曲</string>
+    <string name="no_songs_available">没有可添加的歌曲。</string>
+    <string name="add">添加</string>
+    <string name="cancel">取消</string>
+    <string name="selected_count">已选择 %1$d 项</string>
+    <string name="close_selection">关闭选择</string>
+    <string name="back">返回</string>
+    <string name="remove_selected">移除所选</string>
+    <string name="play_all">播放全部</string>
+    <string name="song_count">%1$d 首歌曲</string>
+    <string name="drag_handle">拖动手柄</string>
+    <string name="cover_image">封面图片</string>
+
+    <!-- HomeScreen -->
+    <string name="new_playlist">新建播放列表</string>
+    <string name="playlist_name">播放列表名称</string>
+    <string name="create">创建</string>
+    <string name="rename_playlist">重命名播放列表</string>
+    <string name="name">名称</string>
+    <string name="rename">重命名</string>
+    <string name="delete">删除</string>
+    <string name="import_songs">导入歌曲</string>
+    <string name="toggle_view">切换视图</string>
+    <string name="settings">设置</string>
+    <string name="playlists_title">播放列表</string>
+    <string name="songs_title">歌曲</string>
+    <string name="delete_selected">删除所选</string>
+    <string name="delete_playlist_message">确定要删除 "%1$s" 吗？</string>
+    <string name="drag">拖动</string>
+
+     <!-- Generic -->
+    <string name="unknown_artist">未知艺术家</string>
+    <string name="unknown_title">未知标题</string>
+    <string name="search">搜索</string>
+    <string name="search_hint">搜索歌曲</string>
+    <string name="search_history">搜索历史</string>
+    <string name="clear_history">清除历史</string>
+    <string name="find_favorite_songs">发现你喜欢的歌曲</string>
+    <string name="download">下载</string>
+    <string name="lyrics">歌词</string>
+
+    <!-- Settings -->
+    <string name="title_settings">设置</string>
+    <string name="clear_cache">清除缓存</string>
+    <string name="clear_cache_desc">清除下载的歌曲和图片</string>
+    <string name="cache_cleared">缓存已清除</string>
+    <string name="title_lyrics">歌词</string>
+    <string name="font_size">字体大小: %1$d sp</string>
+    <string name="font_family">字体系列</string>
+    <string name="blur_intensity">模糊强度: %1$d</string>
+    <string name="title_player">播放器</string>
+    <string name="show_platform_tag">显示平台标签</string>
+    <string name="show_platform_tag_desc">在歌手名下方显示平台标签</string>
+    <string name="title_backup_restore">备份与恢复</string>
+    <string name="export_config">导出配置</string>
+    <string name="export_config_desc">保存设置、歌曲和播放列表</string>
+    <string name="import_config">导入配置</string>
+    <string name="import_config_desc">从备份文件恢复</string>
+    <string name="config_exported_success">配置导出成功</string>
+    <string name="config_export_failed">导出失败: %1$s</string>
+    <string name="config_imported_success">配置导入成功</string>
+    <string name="config_import_failed">导入失败: %1$s</string>
+    <string name="import_failed_file_error">导入失败: 无法读取文件</string>
+    <string name="imported_to_library">已导入</string>
+    <string name="import_song_failed">导入失败</string>
+    <string name="no_url">无链接</string>
+    <string name="downloaded_song">已下载 \'%1$s\'</string>
+    <string name="download_failed_msg">下载失败: %1$s</string>
+</resources>

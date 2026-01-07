@@ -7,9 +7,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.service.connection.MusicServiceConnection
@@ -17,7 +19,6 @@ import top.xiaojiang233.nekoplayer.utils.LyricLine
 import top.xiaojiang233.nekoplayer.utils.LyricsParser
 import java.io.File
 import java.net.URL
-import kotlinx.coroutines.Dispatchers
 
 class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection) : ViewModel() {
 
@@ -55,20 +56,23 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
         }
 
         viewModelScope.launch {
-            while (true) {
-                val currentPos = player?.currentPosition ?: 0
-                _currentPosition.value = currentPos
-                val totalDur = player?.duration?.coerceAtLeast(0) ?: 0
-                _totalDuration.value = totalDur
+            isPlaying.collect { playing ->
+                if (playing) {
+                    while (viewModelScope.isActive && isPlaying.value) {
+                        val currentPos = player?.currentPosition ?: 0
+                        _currentPosition.value = currentPos
+                        _totalDuration.value = player?.duration?.coerceAtLeast(0) ?: 0
 
-                // Update current lyric index
-                val currentLyrics = _lyrics.value
-                if (currentLyrics.isNotEmpty()) {
-                    val index = currentLyrics.indexOfLast { it.time <= currentPos }
-                    _currentLyricIndex.value = index
+                        val currentLyrics = _lyrics.value
+                        if (currentLyrics.isNotEmpty()) {
+                            val index = currentLyrics.indexOfLast { it.time <= currentPos }
+                            if (index != _currentLyricIndex.value) {
+                                _currentLyricIndex.value = index
+                            }
+                        }
+                        delay(100L) // Update every 100ms for smoother progress and better performance
+                    }
                 }
-
-                delay(50L)
             }
         }
     }
@@ -79,9 +83,6 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
 
     fun playPlaylist(songs: List<OnlineSong>, startIndex: Int) {
         if (songs.isEmpty()) return
-        // Don't load lyrics here manually, let the observer handle it
-        // val song = songs[startIndex]
-        // loadLyrics(song)
 
         val mediaItems = songs.map { createMediaItem(it) }
 
@@ -89,8 +90,6 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
         player?.prepare()
         player?.play()
     }
-
-
 
     private fun loadLyrics(lyricUrl: String?) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -100,7 +99,6 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
                         val content = URL(lyricUrl).readText()
                         LyricsParser.parse(content)
                     } else {
-                        // Handle local file path
                         val file = File(lyricUrl)
                         if (file.exists()) {
                             LyricsParser.parseFile(file)
@@ -144,22 +142,18 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
         val currentRepeat = player?.repeatMode ?: androidx.media3.common.Player.REPEAT_MODE_OFF
 
         if (currentShuffle) {
-            // Current is List Random (Shuffle ON) -> Switch to List Loop
             player?.shuffleModeEnabled = false
             player?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
         } else {
             when (currentRepeat) {
                 androidx.media3.common.Player.REPEAT_MODE_ALL -> {
-                    // Current is List Loop -> Switch to Single Loop
                     player?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ONE
                 }
                 androidx.media3.common.Player.REPEAT_MODE_ONE -> {
-                    // Current is Single Loop -> Switch to List Random
                     player?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
                     player?.shuffleModeEnabled = true
                 }
                 else -> {
-                    // Current is OFF or unknown -> Switch to List Loop
                     player?.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
                 }
             }
@@ -194,28 +188,24 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
             s.coverUrl?.toUri()
         }
 
+        val extras = Bundle().apply {
+            putString("title", s.title)
+            putString("artist", s.artist)
+            putString("coverUrl", s.coverUrl)
+            putString("platform", s.platform)
+            putString("lyricUrl", s.lyricUrl)
+        }
+
         val metadata = MediaMetadata.Builder()
             .setTitle(s.title)
             .setArtist(s.artist)
             .setArtworkUri(coverUri)
-            .setExtras(Bundle().apply {
-                putString("title", s.title)
-                putString("artist", s.artist)
-                putString("coverUrl", s.coverUrl)
-                putString("platform", s.platform)
-                putString("lyricUrl", s.lyricUrl)
-            })
+            .setExtras(extras)
             .build()
 
         val requestMetadata = MediaItem.RequestMetadata.Builder()
             .setMediaUri(uri)
-            .setExtras(Bundle().apply {
-                putString("title", s.title)
-                putString("artist", s.artist)
-                putString("coverUrl", s.coverUrl)
-                putString("platform", s.platform)
-                putString("lyricUrl", s.lyricUrl)
-            })
+            .setExtras(extras)
             .build()
 
         return MediaItem.Builder()

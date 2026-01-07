@@ -1,13 +1,14 @@
 package top.xiaojiang233.nekoplayer.ui.screen
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -33,6 +35,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import top.xiaojiang233.nekoplayer.util.findActivity
 import top.xiaojiang233.nekoplayer.viewmodel.SettingsViewModel
+import top.xiaojiang233.nekoplayer.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +47,24 @@ fun SettingsScreen(onBackClick: () -> Unit, settingsViewModel: SettingsViewModel
     val showPlatformTag by settingsViewModel.showPlatformTag.collectAsState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+        onResult = { uri ->
+            if (uri != null) {
+                settingsViewModel.exportConfiguration(uri)
+            }
+        }
+    )
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri != null) {
+                settingsViewModel.importConfiguration(uri)
+            }
+        }
+    )
 
     val view = LocalView.current
     DisposableEffect(isLandscape) {
@@ -69,10 +90,10 @@ fun SettingsScreen(onBackClick: () -> Unit, settingsViewModel: SettingsViewModel
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.title_settings)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 }
             )
@@ -84,23 +105,23 @@ fun SettingsScreen(onBackClick: () -> Unit, settingsViewModel: SettingsViewModel
                 .padding(paddingValues)
         ) {
             ListItem(
-                headlineContent = { Text("Clear Cache") },
-                supportingContent = { Text("Clear downloaded songs and images") },
+                headlineContent = { Text(stringResource(R.string.clear_cache)) },
+                supportingContent = { Text(stringResource(R.string.clear_cache_desc)) },
                 modifier = Modifier.clickable {
                     settingsViewModel.clearCache()
-                    Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.cache_cleared), Toast.LENGTH_SHORT).show()
                 }
             )
 
             Text(
-                text = "Lyrics",
+                text = stringResource(R.string.title_lyrics),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(16.dp)
             )
 
             ListItem(
-                headlineContent = { Text("Font Size: ${lyricsFontSize.toInt()} sp") },
+                headlineContent = { Text(stringResource(R.string.font_size, lyricsFontSize.toInt())) },
                 supportingContent = {
                     Slider(
                         value = lyricsFontSize,
@@ -112,7 +133,7 @@ fun SettingsScreen(onBackClick: () -> Unit, settingsViewModel: SettingsViewModel
             )
 
             ListItem(
-                headlineContent = { Text("Font Family") },
+                headlineContent = { Text(stringResource(R.string.font_family)) },
                 supportingContent = { Text(lyricsFontFamily) },
                 modifier = Modifier.clickable {
                     val nextFont = when (lyricsFontFamily) {
@@ -127,7 +148,7 @@ fun SettingsScreen(onBackClick: () -> Unit, settingsViewModel: SettingsViewModel
             )
 
             ListItem(
-                headlineContent = { Text("Blur Intensity: ${lyricsBlurIntensity.toInt()}") },
+                headlineContent = { Text(stringResource(R.string.blur_intensity, lyricsBlurIntensity.toInt())) },
                 supportingContent = {
                     Slider(
                         value = lyricsBlurIntensity,
@@ -139,15 +160,15 @@ fun SettingsScreen(onBackClick: () -> Unit, settingsViewModel: SettingsViewModel
             )
 
             Text(
-                text = "Player",
+                text = stringResource(R.string.title_player),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(16.dp)
             )
 
             ListItem(
-                headlineContent = { Text("Show Platform Tag") },
-                supportingContent = { Text("Show platform tag under artist name in player") },
+                headlineContent = { Text(stringResource(R.string.show_platform_tag)) },
+                supportingContent = { Text(stringResource(R.string.show_platform_tag_desc)) },
                 trailingContent = {
                     Switch(
                         checked = showPlatformTag,
@@ -157,25 +178,25 @@ fun SettingsScreen(onBackClick: () -> Unit, settingsViewModel: SettingsViewModel
             )
 
             Text(
-                text = "Backup & Restore",
+                text = stringResource(R.string.title_backup_restore),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(16.dp)
             )
 
             ListItem(
-                headlineContent = { Text("Export Configuration") },
-                supportingContent = { Text("Save settings, songs, and playlists to Download/NekoMusic") },
+                headlineContent = { Text(stringResource(R.string.export_config)) },
+                supportingContent = { Text(stringResource(R.string.export_config_desc)) },
                 modifier = Modifier.clickable {
-                    settingsViewModel.exportConfiguration()
+                    exportLauncher.launch("NekoPlayer_Backup.json")
                 }
             )
 
             ListItem(
-                headlineContent = { Text("Import Configuration") },
-                supportingContent = { Text("Restore from Download/NekoMusic/backup.json") },
+                headlineContent = { Text(stringResource(R.string.import_config)) },
+                supportingContent = { Text(stringResource(R.string.import_config_desc)) },
                 modifier = Modifier.clickable {
-                    settingsViewModel.importConfiguration()
+                    importLauncher.launch(arrayOf("application/json"))
                 }
             )
         }

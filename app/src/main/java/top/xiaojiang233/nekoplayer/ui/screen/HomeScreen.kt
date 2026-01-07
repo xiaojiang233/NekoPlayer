@@ -1,10 +1,7 @@
 package top.xiaojiang233.nekoplayer.ui.screen
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -14,7 +11,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,29 +22,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import java.io.File
+import kotlin.math.roundToInt
+import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.model.Playlist
 import top.xiaojiang233.nekoplayer.ui.components.MiniPlayer
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
-import java.io.File
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.zIndex
-import kotlin.math.roundToInt
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import top.xiaojiang233.nekoplayer.util.findActivity
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -66,46 +58,20 @@ fun HomeScreen(
     val viewMode by homeViewModel.viewMode.collectAsState()
     val isPlaying by playerViewModel.isPlaying.collectAsState()
     val nowPlaying by playerViewModel.nowPlaying.collectAsState()
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-
-    val view = LocalView.current
-    DisposableEffect(isLandscape) {
-        val window = view.context.findActivity()?.window
-        if (window != null) {
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            if (isLandscape) {
-                insetsController.hide(WindowInsetsCompat.Type.systemBars())
-                insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-        onDispose {
-            val window = view.context.findActivity()?.window
-            if (window != null) {
-                val insetsController = WindowCompat.getInsetsController(window, view)
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
 
     var showAddMenu by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var showRenamePlaylistDialog by remember { mutableStateOf<Playlist?>(null) }
     var newPlaylistName by remember { mutableStateOf("") }
 
-    // Multi-select state
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedSongIds by remember { mutableStateOf(setOf<String>()) }
 
-    // Drag and Drop State
     var draggingItemIndex by remember { mutableStateOf<Int?>(null) }
     var draggingItemOffset by remember { mutableStateOf(0f) }
-    val itemHeight = 72.dp // Approximate height of SongItem
+    val itemHeight = 72.dp
     val itemHeightPx = with(LocalDensity.current) { itemHeight.toPx() }
 
-    // Playlist Drag and Drop State
     var draggingPlaylistIndex by remember { mutableStateOf<Int?>(null) }
     var draggingPlaylistOffset by remember { mutableStateOf(0f) }
     var showPlaylistOptionsDialog by remember { mutableStateOf<Playlist?>(null) }
@@ -117,12 +83,12 @@ fun HomeScreen(
     if (showCreatePlaylistDialog) {
         AlertDialog(
             onDismissRequest = { showCreatePlaylistDialog = false },
-            title = { Text("New Playlist") },
+            title = { Text(stringResource(R.string.new_playlist)) },
             text = {
                 TextField(
                     value = newPlaylistName,
                     onValueChange = { newPlaylistName = it },
-                    label = { Text("Playlist Name") }
+                    label = { Text(stringResource(R.string.playlist_name)) }
                 )
             },
             confirmButton = {
@@ -132,10 +98,10 @@ fun HomeScreen(
                         newPlaylistName = ""
                         showCreatePlaylistDialog = false
                     }
-                }) { Text("Create") }
+                }) { Text(stringResource(R.string.create)) }
             },
             dismissButton = {
-                TextButton(onClick = { showCreatePlaylistDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showCreatePlaylistDialog = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -145,12 +111,12 @@ fun HomeScreen(
         var renameText by remember { mutableStateOf(playlist.name) }
         AlertDialog(
             onDismissRequest = { showRenamePlaylistDialog = null },
-            title = { Text("Rename Playlist") },
+            title = { Text(stringResource(R.string.rename_playlist)) },
             text = {
                 TextField(
                     value = renameText,
                     onValueChange = { renameText = it },
-                    label = { Text("Name") }
+                    label = { Text(stringResource(R.string.name)) }
                 )
             },
             confirmButton = {
@@ -159,10 +125,10 @@ fun HomeScreen(
                         homeViewModel.renamePlaylist(playlist, renameText)
                         showRenamePlaylistDialog = null
                     }
-                }) { Text("Rename") }
+                }) { Text(stringResource(R.string.rename)) }
             },
             dismissButton = {
-                TextButton(onClick = { showRenamePlaylistDialog = null }) { Text("Cancel") }
+                TextButton(onClick = { showRenamePlaylistDialog = null }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -181,7 +147,7 @@ fun HomeScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Rename", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                        Text(stringResource(R.string.rename), modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
                     }
                     TextButton(
                         onClick = {
@@ -190,13 +156,13 @@ fun HomeScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Delete", color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                        Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
                     }
                 }
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { showPlaylistOptionsDialog = null }) { Text("Cancel") }
+                TextButton(onClick = { showPlaylistOptionsDialog = null }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -206,9 +172,9 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     if (isSelectionMode) {
-                        Text("${selectedSongIds.size} Selected")
+                        Text(stringResource(R.string.selected_count, selectedSongIds.size))
                     } else {
-                        Text("NekoPlayer")
+                        Text(stringResource(R.string.app_name))
                     }
                 },
                 navigationIcon = {
@@ -217,30 +183,32 @@ fun HomeScreen(
                             isSelectionMode = false
                             selectedSongIds = emptySet()
                         }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close Selection")
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close_selection))
                         }
                     } else {
                         Box {
                             IconButton(onClick = { showAddMenu = true }) {
-                                Icon(Icons.Default.Add, contentDescription = "Add")
+                                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add))
                             }
                             DropdownMenu(
                                 expanded = showAddMenu,
                                 onDismissRequest = { showAddMenu = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Import Songs") },
+                                    text = { Text(stringResource(R.string.import_songs)) },
                                     onClick = {
                                         showAddMenu = false
                                         onAddMusicClick()
-                                    }
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("New Playlist") },
+                                    text = { Text(stringResource(R.string.new_playlist)) },
                                     onClick = {
                                         showAddMenu = false
                                         showCreatePlaylistDialog = true
-                                    }
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = null) }
                                 )
                             }
                         }
@@ -255,17 +223,17 @@ fun HomeScreen(
                             isSelectionMode = false
                             selectedSongIds = emptySet()
                         }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_selected))
                         }
                     } else {
                         IconButton(onClick = { homeViewModel.toggleViewMode() }) {
                             Icon(
                                 if (viewMode == HomeViewModel.ViewMode.List) Icons.Default.GridView else Icons.AutoMirrored.Filled.List,
-                                contentDescription = "Toggle View"
+                                contentDescription = stringResource(R.string.toggle_view)
                             )
                         }
                         IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                         }
                     }
                 }
@@ -285,7 +253,7 @@ fun HomeScreen(
                     if (playlists.isNotEmpty() && !isSelectionMode) {
                         item {
                             Text(
-                                "Playlists",
+                                stringResource(R.string.playlists_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.padding(16.dp)
                             )
@@ -301,7 +269,6 @@ fun HomeScreen(
                                     .graphicsLayer {
                                         translationY = offset
                                     }
-                                    .then(if (isDragging) Modifier else Modifier.animateItem())
                             ) {
                                 PlaylistItem(
                                     playlist = playlist,
@@ -314,7 +281,6 @@ fun HomeScreen(
                                         val currentDraggingIndex = draggingPlaylistIndex ?: return@PlaylistItem
                                         val currentOffset = draggingPlaylistOffset
 
-                                        // Calculate if we should swap
                                         val movedItems = (currentOffset / itemHeightPx).roundToInt()
                                         val targetIndex = (currentDraggingIndex + movedItems).coerceIn(0, playlists.lastIndex)
 
@@ -338,7 +304,7 @@ fun HomeScreen(
 
                     item {
                         Text(
-                            "Songs",
+                            stringResource(R.string.songs_title),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(16.dp)
                         )
@@ -355,7 +321,6 @@ fun HomeScreen(
                                 .graphicsLayer {
                                     translationY = offset
                                 }
-                                .then(if (isDragging) Modifier else Modifier.animateItem())
                         ) {
                             SongItem(
                                 song = song,
@@ -388,7 +353,6 @@ fun HomeScreen(
                                     val currentDraggingIndex = draggingItemIndex ?: return@SongItem
                                     val currentOffset = draggingItemOffset
 
-                                    // Calculate if we should swap
                                     val movedItems = (currentOffset / itemHeightPx).roundToInt()
                                     val targetIndex = (currentDraggingIndex + movedItems).coerceIn(0, localSongs.lastIndex)
 
@@ -398,7 +362,7 @@ fun HomeScreen(
                                         newSongs.add(targetIndex, item)
                                         homeViewModel.updateLocalSongsOrder(newSongs)
                                         draggingItemIndex = targetIndex
-                                        draggingItemOffset -= (targetIndex - currentDraggingIndex) * itemHeightPx
+                                        draggingItemOffset -= (targetIndex - currentDraggingIndex) * itemHeightPx.toInt()
                                     }
                                 } } else null,
                                 onDragEnd = if (!isSelectionMode) { {
@@ -410,7 +374,6 @@ fun HomeScreen(
                     }
                 }
             } else {
-                // Grid View (Simplified for now, no drag and drop in grid yet)
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 150.dp),
                     modifier = Modifier.fillMaxSize(),
@@ -419,7 +382,7 @@ fun HomeScreen(
                     if (playlists.isNotEmpty() && !isSelectionMode) {
                         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                             Text(
-                                "Playlists",
+                                stringResource(R.string.playlists_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.padding(8.dp)
                             )
@@ -436,7 +399,7 @@ fun HomeScreen(
 
                     item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                         Text(
-                            "Songs",
+                            stringResource(R.string.songs_title),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(8.dp)
                         )
@@ -470,47 +433,30 @@ fun HomeScreen(
                     }
                 }
             }
+            
+            val fabBottomPadding by animateDpAsState(
+                targetValue = if (nowPlaying != null) 96.dp else 16.dp,
+                label = "fabPadding"
+            )
 
             FloatingActionButton(
                 onClick = onSearchClick,
                 modifier = Modifier
-                    .align(if (isLandscape) Alignment.BottomStart else Alignment.BottomEnd)
-                    .padding(
-                        end = if (isLandscape) 0.dp else 16.dp,
-                        start = if (isLandscape) 16.dp else 0.dp,
-                        bottom = if (nowPlaying != null && !isLandscape) 100.dp else 16.dp
-                    )
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = fabBottomPadding)
             ) {
-                Icon(Icons.Default.Search, contentDescription = "Search")
+                Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search))
             }
 
             if (nowPlaying != null) {
-                if (isLandscape) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp)
-                            .width(300.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onPlayerClick() }
-                    ) {
-                        MiniPlayer(
-                            isPlaying = isPlaying,
-                            nowPlaying = nowPlaying,
-                            onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                } else {
-                    MiniPlayer(
-                        isPlaying = isPlaying,
-                        nowPlaying = nowPlaying,
-                        onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .clickable { onPlayerClick() }
-                    )
-                }
+                MiniPlayer(
+                    isPlaying = isPlaying,
+                    nowPlaying = nowPlaying,
+                    onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .clickable { onPlayerClick() }
+                )
             }
         }
     }
@@ -554,7 +500,7 @@ fun SongItem(
                         } else if (onDragStart != null && onDrag != null && onDragEnd != null) {
                             Icon(
                                 imageVector = Icons.Default.DragIndicator,
-                                contentDescription = "Drag",
+                                contentDescription = stringResource(R.string.drag),
                                 modifier = Modifier
                                     .padding(end = 8.dp)
                                     .pointerInput(Unit) {
@@ -574,7 +520,7 @@ fun SongItem(
                             model = song.coverUrl ?: song.songUrl?.let { url ->
                                 if (url.startsWith("/")) File(url) else null
                             },
-                            contentDescription = "Cover",
+                            contentDescription = stringResource(R.string.cover_image),
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp)),
@@ -607,7 +553,7 @@ fun SongItem(
                         model = song.coverUrl ?: song.songUrl?.let { url ->
                             if (url.startsWith("/")) File(url) else null
                         },
-                        contentDescription = "Cover",
+                        contentDescription = stringResource(R.string.cover_image),
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f)
@@ -667,13 +613,13 @@ fun PlaylistItem(
         ) {
             ListItem(
                 headlineContent = { Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                supportingContent = { Text("${playlist.songIds.size} songs") },
+                supportingContent = { Text(stringResource(R.string.song_count, playlist.songIds.size)) },
                 leadingContent = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (onDragStart != null && onDrag != null && onDragEnd != null) {
                             Icon(
                                 imageVector = Icons.Default.DragIndicator,
-                                contentDescription = "Drag",
+                                contentDescription = stringResource(R.string.drag),
                                 modifier = Modifier
                                     .padding(end = 8.dp)
                                     .pointerInput(Unit) {
@@ -691,7 +637,7 @@ fun PlaylistItem(
                         }
                         AsyncImage(
                             model = playlist.coverUrl,
-                            contentDescription = "Cover",
+                            contentDescription = stringResource(R.string.cover_image),
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp)),
@@ -720,7 +666,7 @@ fun PlaylistItem(
             ) {
                 AsyncImage(
                     model = playlist.coverUrl,
-                    contentDescription = "Cover",
+                    contentDescription = stringResource(R.string.cover_image),
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
@@ -737,7 +683,7 @@ fun PlaylistItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${playlist.songIds.size} songs",
+                    text = stringResource(R.string.song_count, playlist.songIds.size),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -747,4 +693,3 @@ fun PlaylistItem(
         }
     }
 }
-
