@@ -1,6 +1,7 @@
 package top.xiaojiang233.nekoplayer.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,11 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.media3.common.MediaItem
 import androidx.palette.graphics.Palette
-import coil.ImageLoader
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -40,7 +40,9 @@ fun MiniPlayer(
     nowPlaying: MediaItem?,
     onPlayPauseClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onDismiss: () -> Unit = {}
+    onDismiss: () -> Unit = {},
+    customCover: Any? = null,
+    onMiniPlayerClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -50,31 +52,41 @@ fun MiniPlayer(
     var backgroundColor by remember { mutableStateOf(Color.Gray) }
     var contentColor by remember { mutableStateOf(Color.White) }
 
-    val displayAlbumArt = nowPlaying?.mediaMetadata?.artworkUri ?: nowPlaying?.mediaId?.let { _ ->
-        nowPlaying.requestMetadata.mediaUri?.let { uri ->
-            if (uri.scheme == "file") File(uri.path ?: "") else null
-        }
+    val displayAlbumArt = remember(nowPlaying, customCover) {
+        customCover ?: nowPlaying?.mediaMetadata?.artworkUri ?: nowPlaying?.requestMetadata?.mediaUri
     }
 
     LaunchedEffect(displayAlbumArt) {
-        displayAlbumArt?.let { model ->
-            withContext(Dispatchers.IO) {
-                val loader = ImageLoader(context)
+        if (displayAlbumArt != null) {
+            val swatch = withContext(Dispatchers.IO) {
+                val loader = context.imageLoader
                 val request = ImageRequest.Builder(context)
-                    .data(model)
+                    .data(displayAlbumArt)
                     .allowHardware(false)
+                    .bitmapConfig(android.graphics.Bitmap.Config.ARGB_8888) // Ensure compatible config
+                    .size(100) // Downsample for performance and reliability
                     .build()
                 val result = loader.execute(request)
                 if (result is SuccessResult) {
                     val bitmap = result.drawable.toBitmap()
                     val palette = Palette.from(bitmap).generate()
-                    val swatch = palette.dominantSwatch ?: palette.vibrantSwatch ?: palette.mutedSwatch
-                    swatch?.let {
-                        backgroundColor = Color(it.rgb)
-                        contentColor = Color(it.bodyTextColor)
-                    }
-                }
+                    // Try dominant, then others. Ensure we get a non-null swatch if possible.
+                    palette.dominantSwatch
+                        ?: palette.vibrantSwatch
+                        ?: palette.mutedSwatch
+                        ?: palette.darkVibrantSwatch
+                        ?: palette.lightVibrantSwatch
+                } else null
             }
+
+            swatch?.let {
+                backgroundColor = Color(it.rgb)
+                contentColor = Color(it.bodyTextColor)
+            }
+        } else {
+            // Reset to default if no art
+            backgroundColor = Color.Gray
+            contentColor = Color.White
         }
     }
 
@@ -120,14 +132,17 @@ fun MiniPlayer(
                 }
             }
         } else if (isLandscape) {
-            Box(modifier = modifier.fillMaxSize().padding(16.dp)) {
+            Box(
+                modifier = modifier.padding(16.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
                 Row(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
                         .widthIn(max = 400.dp)
                         .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp))
                         .clip(RoundedCornerShape(16.dp))
                         .background(backgroundColor)
+                        .clickable(enabled = onMiniPlayerClick != null) { onMiniPlayerClick?.invoke() }
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -173,6 +188,7 @@ fun MiniPlayer(
                     .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
                     .background(backgroundColor)
+                    .clickable(enabled = onMiniPlayerClick != null) { onMiniPlayerClick?.invoke() }
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween

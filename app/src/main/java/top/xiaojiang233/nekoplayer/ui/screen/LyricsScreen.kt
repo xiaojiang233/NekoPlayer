@@ -13,11 +13,13 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,6 +27,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -55,6 +60,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
+import top.xiaojiang233.nekoplayer.R
+import top.xiaojiang233.nekoplayer.ui.components.LyricsSearchDialog
 import top.xiaojiang233.nekoplayer.util.findActivity
 import kotlin.math.abs
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
@@ -74,7 +81,31 @@ fun LyricsScreen(
     val isDragged by listState.interactionSource.collectIsDraggedAsState()
 
     var isUserScrolling by remember { mutableStateOf(false) }
+    var showSearchDialog by remember { mutableStateOf(false) }
 
+    if (showSearchDialog) {
+        val searchResults by viewModel.lyricSearchResults.collectAsState()
+        val isSearching by viewModel.isSearchingLyrics.collectAsState()
+        val currentSong = viewModel.nowPlaying.collectAsState().value
+
+        val initialQuery = currentSong?.mediaMetadata?.let { "${it.title} ${it.artist}" } ?: ""
+
+        LyricsSearchDialog(
+            initialQuery = initialQuery,
+            onDismiss = {
+                showSearchDialog = false
+                viewModel.clearSearchResults()
+            },
+            onSearch = { query -> viewModel.searchLyrics(query) },
+            results = searchResults,
+            isSearching = isSearching,
+            onSelect = { song ->
+                viewModel.applyMetadata(song)
+                showSearchDialog = false
+                viewModel.clearSearchResults()
+            }
+        )
+    }
 
     val fontFamily = when (lyricsFontFamilyName) {
         "Serif" -> FontFamily.Serif
@@ -88,22 +119,24 @@ fun LyricsScreen(
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
     val view = LocalView.current
-    DisposableEffect(isLandscape) {
-        val window = view.context.findActivity()?.window
-        if (window != null) {
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            if (isLandscape) {
-                insetsController.hide(WindowInsetsCompat.Type.systemBars())
-                insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-        onDispose {
+    if (!view.isInEditMode) { // Optional check to avoid preview crashes
+        DisposableEffect(isLandscape) {
             val window = view.context.findActivity()?.window
             if (window != null) {
                 val insetsController = WindowCompat.getInsetsController(window, view)
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
+                if (isLandscape) {
+                    insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                    insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                } else {
+                    insetsController.show(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+            onDispose {
+                val window = view.context.findActivity()?.window
+                if (window != null) {
+                    val insetsController = WindowCompat.getInsetsController(window, view)
+                    insetsController.show(WindowInsetsCompat.Type.systemBars())
+                }
             }
         }
     }
@@ -172,11 +205,23 @@ fun LyricsScreen(
         contentAlignment = Alignment.Center
     ) {
         if (displayLyrics.isEmpty()) {
-            Text(
-                text = "No Lyrics",
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.White.copy(alpha = 0.5f)
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = stringResource(R.string.no_lyrics),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White.copy(alpha = 0.5f)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = { showSearchDialog = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.2f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(text = stringResource(R.string.search_lyrics))
+                }
+            }
         } else {
             LazyColumn(
                 state = listState,

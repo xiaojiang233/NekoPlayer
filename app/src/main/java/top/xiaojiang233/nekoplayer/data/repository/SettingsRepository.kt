@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import top.xiaojiang233.nekoplayer.NekoPlayerApplication
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -26,6 +28,7 @@ object SettingsRepository {
     private val LYRICS_BLUR_INTENSITY_KEY = floatPreferencesKey("lyrics_blur_intensity")
     private val SHOW_PLATFORM_TAG_KEY = booleanPreferencesKey("show_platform_tag")
     private val SEARCH_HISTORY_KEY = stringSetPreferencesKey("search_history")
+    private val SEARCH_HISTORY_JSON_KEY = stringPreferencesKey("search_history_json")
     private val VIEW_MODE_KEY = stringPreferencesKey("view_mode")
 
     val lyricsFontSize: Flow<Float> = dataStore.data.map { preferences ->
@@ -44,8 +47,18 @@ object SettingsRepository {
         preferences[SHOW_PLATFORM_TAG_KEY] ?: true
     }
 
-    val searchHistory: Flow<Set<String>> = dataStore.data.map { preferences ->
-        preferences[SEARCH_HISTORY_KEY] ?: emptySet()
+    val searchHistory: Flow<List<String>> = dataStore.data.map { preferences ->
+        val jsonString = preferences[SEARCH_HISTORY_JSON_KEY]
+        if (jsonString != null) {
+            try {
+                Json.decodeFromString<List<String>>(jsonString)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            // Migration or fallback
+            preferences[SEARCH_HISTORY_KEY]?.toList() ?: emptyList()
+        }
     }
 
     val viewMode: Flow<String> = dataStore.data.map { preferences ->
@@ -78,13 +91,26 @@ object SettingsRepository {
 
     suspend fun addSearchHistory(query: String) {
         dataStore.edit { preferences ->
-            val currentHistory = preferences[SEARCH_HISTORY_KEY] ?: emptySet()
-            preferences[SEARCH_HISTORY_KEY] = currentHistory + query
+            val jsonString = preferences[SEARCH_HISTORY_JSON_KEY]
+            val currentList = if (jsonString != null) {
+                try {
+                    Json.decodeFromString<List<String>>(jsonString)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else {
+                preferences[SEARCH_HISTORY_KEY]?.toList() ?: emptyList()
+            }
+
+            // Remove existing query to move it to the end (or beginning)
+            val newList = currentList.filter { it != query } + query
+            preferences[SEARCH_HISTORY_JSON_KEY] = Json.encodeToString(newList)
         }
     }
 
     suspend fun clearSearchHistory() {
         dataStore.edit { preferences ->
+            preferences.remove(SEARCH_HISTORY_JSON_KEY)
             preferences.remove(SEARCH_HISTORY_KEY)
         }
     }

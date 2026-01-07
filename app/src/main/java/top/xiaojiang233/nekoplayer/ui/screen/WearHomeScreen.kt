@@ -14,6 +14,8 @@ import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.*
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
+import top.xiaojiang233.nekoplayer.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -46,44 +48,40 @@ fun WearHomeScreen(
         ) {
             if (nowPlaying != null) {
                 item {
-                    Card(
+                    TitleCard(
                         onClick = onPlayerClick,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
+                        title = { Text(stringResource(R.string.now_playing)) },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "Now Playing: ${nowPlaying?.mediaMetadata?.title ?: ""}",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1
+                            text = "${nowPlaying?.mediaMetadata?.title ?: stringResource(R.string.unknown_title)} - ${nowPlaying?.mediaMetadata?.artist ?: stringResource(R.string.unknown_artist)}",
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
                 }
             }
 
-            item { ListHeader { Text("Library") } }
+            item { ListHeader { Text(stringResource(R.string.library)) } }
 
             item {
                 Chip(
-                    label = { Text("Search") },
+                    label = { Text(stringResource(R.string.search)) },
                     onClick = onSearchClick,
-                    icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+                    icon = { Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
             item {
                 Chip(
-                    label = { Text("Settings") },
+                    label = { Text(stringResource(R.string.settings)) },
                     onClick = onSettingsClick,
-                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
+                    icon = { Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            item { ListHeader { Text("Playlists") } }
+            item { ListHeader { Text(stringResource(R.string.playlists_title)) } }
             items(playlists) { playlist ->
                 Chip(
                     label = { Text(playlist.name) },
@@ -92,7 +90,7 @@ fun WearHomeScreen(
                 )
             }
 
-            item { ListHeader { Text("Songs") } }
+            item { ListHeader { Text(stringResource(R.string.songs_title)) } }
             items(localSongs) { song ->
                 Chip(
                     label = { Text(song.title) },

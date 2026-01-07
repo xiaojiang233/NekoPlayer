@@ -67,7 +67,7 @@ fun SearchScreen(
     Scaffold(
         topBar = {
             Column {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(35.dp)) // Increased top spacer
                 // Custom Search Bar
                 Row(
                     modifier = Modifier
@@ -276,16 +276,7 @@ fun SearchScreen(
                     }
                 }
             }
-            if (nowPlaying != null) {
-                MiniPlayer(
-                    isPlaying = isPlaying,
-                    nowPlaying = nowPlaying,
-                    onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .clickable { onPlayerClick() }
-                )
-            }
+
         }
     }
 }

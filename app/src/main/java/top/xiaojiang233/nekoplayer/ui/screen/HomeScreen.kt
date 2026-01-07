@@ -2,7 +2,6 @@ package top.xiaojiang233.nekoplayer.ui.screen
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
@@ -16,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -208,7 +208,7 @@ fun HomeScreen(
                                         showAddMenu = false
                                         showCreatePlaylistDialog = true
                                     },
-                                    leadingIcon = { Icon(Icons.Default.PlaylistAdd, contentDescription = null) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null) }
                                 )
                             }
                         }
@@ -345,7 +345,7 @@ fun HomeScreen(
                                         selectedSongIds = setOf(song.id)
                                     }
                                 },
-                                onDragStart = if (!isSelectionMode) { {
+                                onDragStart = if (!isSelectionMode) {  {
                                     draggingItemIndex = index
                                 } } else null,
                                 onDrag = if (!isSelectionMode) { { dragAmount ->
@@ -435,7 +435,7 @@ fun HomeScreen(
             }
             
             val fabBottomPadding by animateDpAsState(
-                targetValue = if (nowPlaying != null) 96.dp else 16.dp,
+                targetValue = if (nowPlaying != null) 96.dp else 32.dp,
                 label = "fabPadding"
             )
 
@@ -443,21 +443,12 @@ fun HomeScreen(
                 onClick = onSearchClick,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = fabBottomPadding)
+                    .padding(end = 32.dp, bottom = fabBottomPadding)
             ) {
                 Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search))
             }
 
-            if (nowPlaying != null) {
-                MiniPlayer(
-                    isPlaying = isPlaying,
-                    nowPlaying = nowPlaying,
-                    onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .clickable { onPlayerClick() }
-                )
-            }
+
         }
     }
 }
@@ -584,6 +575,14 @@ fun SongItem(
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (isSelectionMode && song.platform == "local") {
+                    Text(
+                        text = stringResource(R.string.locally_imported),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
     }

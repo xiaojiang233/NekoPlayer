@@ -72,4 +72,31 @@
     <string name="no_url">No URL</string>
     <string name="downloaded_song">Downloaded \'%1$s\'</string>
     <string name="download_failed_msg">Download failed: %1$s</string>
+    <string name="no_history">No history</string>
+    <string name="title_search">Search</string>
+
+    <!-- Lyrics Search -->
+    <string name="no_lyrics">No Lyrics</string>
+    <string name="search_lyrics">Search Lyrics</string>
+    <string name="match_lyrics_cover">Match Lyrics &amp; Cover</string>
+    <string name="song_title_artist">Song Title / Artist</string>
+
+    <!-- Wearable -->
+    <string name="now_playing">Now Playing</string>
+    <string name="library">Library</string>
+    <string name="locally_imported">Locally Imported</string>
+
+    <string name="playback_mode">Play Mode</string>
+    <string name="previous">上一首</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="next">Next</string>
+    <string name="close">Close</string>
+    <string name="album_art">Album Cover</string>
+
+    <!-- About Section -->
+    <string name="title_about">About</string>
+    <string name="version">Version: %1$s</string>
+    <string name="author">Author: xiaojiang233</string>
+    <string name="github">Github</string>
 </resources>

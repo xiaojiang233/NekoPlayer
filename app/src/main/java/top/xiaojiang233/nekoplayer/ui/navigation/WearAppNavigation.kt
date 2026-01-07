@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 import top.xiaojiang233.nekoplayer.ui.screen.WearHomeScreen
 import top.xiaojiang233.nekoplayer.ui.screen.wear.WearPlaceholderScreen
 import top.xiaojiang233.nekoplayer.ui.screen.wear.WearSearchScreen
+import top.xiaojiang233.nekoplayer.ui.screen.PlayerScreen
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 
@@ -46,7 +47,16 @@ fun WearAppNavigation(
             WearPlaceholderScreen(screenName = "Settings")
         }
         composable(Routes.PLAYER) {
-            WearPlaceholderScreen(screenName = "Player")
+            // Replace placeholder with actual PlayerScreen, adapted for Wear
+            // By passing isWearable=true (inferred from configuration inside PlayerScreen if we didn't remove it or logic is there)
+            // But I removed `isWearable` parameter from PlayerScreen signature before.
+            // PlayerScreen logic now automatically detects configuration.
+            // However, Wear navigation passes control here.
+            // I should use the existing PlayerScreen which handles `isWearable` check internally via `LocalConfiguration`.
+            PlayerScreen(
+                viewModel = playerViewModel,
+                onCloseClick = { navController.popBackStack() }
+            )
         }
         composable(
             route = Routes.PLAYLIST,

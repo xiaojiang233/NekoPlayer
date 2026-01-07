@@ -72,4 +72,32 @@
     <string name="no_url">无链接</string>
     <string name="downloaded_song">已下载 \'%1$s\'</string>
     <string name="download_failed_msg">下载失败: %1$s</string>
+    <string name="no_history">无历史记录</string>
+    <string name="title_search">搜索</string>
+
+    <!-- Lyrics Search -->
+    <string name="no_lyrics">无歌词</string>
+    <string name="search_lyrics">搜索歌词</string>
+    <string name="match_lyrics_cover">匹配歌词和封面</string>
+    <string name="song_title_artist">歌曲标题 / 艺术家</string>
+
+    <!-- Wearable -->
+    <string name="now_playing">正在播放</string>
+    <string name="library">音乐库</string>
+
+    <!-- Media Controls -->
+    <string name="playback_mode">播放模式</string>
+    <string name="previous">上一首</string>
+    <string name="play">播放</string>
+    <string name="pause">暂停</string>
+    <string name="next">下一首</string>
+    <string name="close">关闭</string>
+    <string name="album_art">专辑封面</string>
+    <string name="locally_imported">本地导入</string>
+
+    <!-- About Section -->
+    <string name="title_about">关于</string>
+    <string name="version">版本: %1$s</string>
+    <string name="author">作者: xiaojiang233</string>
+    <string name="github">Github 项目地址</string>
 </resources>

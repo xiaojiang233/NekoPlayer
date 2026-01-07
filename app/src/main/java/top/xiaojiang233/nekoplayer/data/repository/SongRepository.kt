@@ -39,6 +39,7 @@ object SongRepository {
 
     private val downloadsDir = File(NekoPlayerApplication.getAppContext().filesDir, "downloads")
     private val localSongsOrderFile = File(downloadsDir, "order.json")
+    private val hiddenSongsFile = File(downloadsDir, "hidden.json")
 
     sealed class DownloadState {
         object None : DownloadState()
@@ -66,6 +67,20 @@ object SongRepository {
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    private fun getHiddenSongs(): MutableSet<String> {
+        if (!hiddenSongsFile.exists()) return mutableSetOf()
+        return try {
+            json.decodeFromString<Set<String>>(hiddenSongsFile.readText()).toMutableSet()
+        } catch (e: Exception) {
+            mutableSetOf()
+        }
+    }
+
+    private fun saveHiddenSongs(hiddenSongs: Set<String>) {
+        if (!downloadsDir.exists()) downloadsDir.mkdirs()
+        hiddenSongsFile.writeText(json.encodeToString(hiddenSongs))
     }
 
     fun addLocalSong(uri: Uri) {
@@ -180,9 +195,33 @@ object SongRepository {
                 // Download Content
                 var url = URL(song.songUrl)
                 var connection = url.openConnection() as HttpURLConnection
-                // ... (Keep existing redirect logic if possible, simplified here) ...
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                connection.instanceFollowRedirects = true
                 connection.connect()
+
+                var responseCode = connection.responseCode
+                var redirectCount = 0
+                while (responseCode == HttpURLConnection.HTTP_MOVED_TEMP ||
+                       responseCode == HttpURLConnection.HTTP_MOVED_PERM ||
+                       responseCode == HttpURLConnection.HTTP_SEE_OTHER ||
+                       responseCode == 307 ||
+                       responseCode == 308) {
+                    if (redirectCount > 10) throw Exception("Too many redirects")
+                    val location = connection.getHeaderField("Location")
+                    url = URL(url, location)
+                    connection = url.openConnection() as HttpURLConnection
+                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    connection.connect()
+                    responseCode = connection.responseCode
+                    redirectCount++
+                }
+
                 val lengthOfFile = connection.contentLength
+
+                // Check for successful response code
+                if (responseCode !in 200..299) {
+                    throw Exception("Server returned HTTP $responseCode")
+                }
 
                 val tempFile = File(context.cacheDir, "temp_download_$fileName") // Download to temp first for tagging
 
@@ -207,13 +246,38 @@ object SongRepository {
                 if (!song.coverUrl.isNullOrBlank()) {
                     coverFile = File(context.cacheDir, "${song.id}.jpg")
                     try {
-                        URL(song.coverUrl).openStream().use { input ->
-                            val bitmap = BitmapFactory.decodeStream(input)
-                            if (bitmap != null) {
-                                coverFile.outputStream().use { output ->
-                                    bitmap.compress(Bitmap.CompressFormat.JPEG, 70, output)
+                        var coverUrl = URL(song.coverUrl)
+                        var coverConn = coverUrl.openConnection() as HttpURLConnection
+                        coverConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        coverConn.instanceFollowRedirects = true
+                        coverConn.connect()
+
+                        var coverCode = coverConn.responseCode
+                        var coverRedirects = 0
+                        while (coverCode == HttpURLConnection.HTTP_MOVED_TEMP ||
+                               coverCode == HttpURLConnection.HTTP_MOVED_PERM ||
+                               coverCode == HttpURLConnection.HTTP_SEE_OTHER ||
+                               coverCode == 307 ||
+                               coverCode == 308) {
+                            if (coverRedirects > 10) break
+                            val loc = coverConn.getHeaderField("Location")
+                            coverUrl = URL(coverUrl, loc)
+                            coverConn = coverUrl.openConnection() as HttpURLConnection
+                            coverConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                            coverConn.connect()
+                            coverCode = coverConn.responseCode
+                            coverRedirects++
+                        }
+
+                        if (coverCode in 200..299) {
+                            coverConn.inputStream.use { input ->
+                                val bitmap = BitmapFactory.decodeStream(input)
+                                if (bitmap != null) {
+                                    coverFile.outputStream().use { output ->
+                                        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, output)
+                                    }
+                                    bitmap.recycle()
                                 }
-                                bitmap.recycle()
                             }
                         }
                     } catch (e: Exception) { e.printStackTrace() }
@@ -273,11 +337,35 @@ object SongRepository {
          val context = NekoPlayerApplication.getAppContext()
          try {
              val uri = Uri.parse(song.songUrl)
-             context.contentResolver.delete(uri, null, null)
-             // Note: On Android 11+ this might throw RecoverableSecurityException which needs Activity context to handle.
-             // For now we assume we own the file or have permission.
+             // Try to delete from MediaStore first, if failed (SecurityException), add to hidden blacklist
+             try {
+                 context.contentResolver.delete(uri, null, null)
+             } catch (e: Exception) {
+                 // On Android 11+, apps cannot delete files they don't own without user interaction / RecoverableSecurityException
+                 // Since we want to just "remove from list" in that case:
+                 e.printStackTrace()
+                 // Add to hidden list
+                 val hidden = getHiddenSongs()
+                 hidden.add(song.id)
+                 saveHiddenSongs(hidden)
+             }
 
+             // Also remove from download state
              _downloadState.value = _downloadState.value.toMutableMap().apply { remove(song.id) }
+
+             // Remove downloaded lyric and cover if they exist
+             val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+             val safeTitle = song.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+             val safeArtist = song.artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+             val fileNameBase = "$safeTitle - $safeArtist".trim()
+             val lyricFile = File(musicDir, "$fileNameBase.lrc")
+             if (lyricFile.exists()) {
+                 lyricFile.delete()
+             }
+             val coverFile = File(musicDir, "$fileNameBase.jpg")
+             if (coverFile.exists()) {
+                 coverFile.delete()
+             }
          } catch (e: Exception) {
              e.printStackTrace()
          }
@@ -334,8 +422,8 @@ object SongRepository {
                         album = album,
                         platform = "local",
                         songUrl = contentUri.toString(),
-                        coverUrl = null, // Needs separate loader or contentUri
-                        lyricUrl = null
+                        coverUrl = contentUri.toString(), // Use content URI for cover, handled by AudioCoverFetcher
+                        lyricUrl = null // PlayerViewModel will attempt to read embedded lyrics if null
                     ))
                 }
             }
@@ -343,14 +431,17 @@ object SongRepository {
             e.printStackTrace()
         }
 
+        val hiddenSongs = getHiddenSongs()
+        val visibleSongs = songs.filter { it.id !in hiddenSongs }
+
         val order = getLocalSongsOrder()
         if (order.isEmpty()) {
-            return songs.sortedBy { it.title }
+            return visibleSongs.sortedBy { it.title }
         }
 
-        val songMap = songs.associateBy { it.id }
+        val songMap = visibleSongs.associateBy { it.id }
         val orderedSongs = order.mapNotNull { songMap[it] }
-        val unorderedSongs = songs.filter { it.id !in order }.sortedBy { it.title }
+        val unorderedSongs = visibleSongs.filter { it.id !in order }.sortedBy { it.title }
 
         return orderedSongs + unorderedSongs
     }
@@ -373,6 +464,63 @@ object SongRepository {
         val imageCacheDirectory = File(context.cacheDir, "image_cache")
         if (imageCacheDirectory.exists()) {
             imageCacheDirectory.deleteRecursively()
+        }
+    }
+
+    suspend fun updateSongMetadata(song: OnlineSong, selectedMatch: OnlineSong) {
+        val context = NekoPlayerApplication.getAppContext()
+
+        withContext(Dispatchers.IO) {
+            try {
+                // Use title and artist for filename
+                val safeTitle = song.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val safeArtist = song.artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val fileNameBase = "$safeTitle - $safeArtist".trim()
+
+                val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+
+                // 1. Save Lyrics
+                if (!selectedMatch.lyricUrl.isNullOrBlank() && selectedMatch.lyricUrl.startsWith("http")) {
+                     try {
+                         val lyricsContent = URL(selectedMatch.lyricUrl).readText()
+                         val lrcFile = File(musicDir, "$fileNameBase.lrc")
+                         lrcFile.writeText(lyricsContent)
+                     } catch (e: Exception) { e.printStackTrace() }
+                }
+
+                // 2. Save Cover
+                if (!selectedMatch.coverUrl.isNullOrBlank()) {
+                     try {
+                         val coverFile = File(musicDir, "$fileNameBase.jpg")
+                         val url = URL(selectedMatch.coverUrl)
+                         val connection = url.openConnection() as HttpURLConnection
+                         connection.instanceFollowRedirects = true
+                         connection.connect()
+                         if (connection.responseCode in 200..299) {
+                             connection.inputStream.use { input ->
+                                 val bitmap = BitmapFactory.decodeStream(input)
+                                 if (bitmap != null) {
+                                     coverFile.outputStream().use { output ->
+                                         // Compress to JPEG with 70% quality to save space
+                                         bitmap.compress(Bitmap.CompressFormat.JPEG, 70, output)
+                                     }
+                                     bitmap.recycle()
+                                 }
+                             }
+                         }
+                     } catch (e: Exception) { e.printStackTrace() }
+                }
+
+                withContext(Dispatchers.Main) {
+                     Toast.makeText(context, context.getString(top.xiaojiang233.nekoplayer.R.string.config_imported_success).replace("Configuration imported", "Metadata saved"), Toast.LENGTH_SHORT).show()
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error saving metadata: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 }

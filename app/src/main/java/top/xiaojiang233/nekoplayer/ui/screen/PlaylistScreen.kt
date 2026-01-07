@@ -55,7 +55,6 @@ import kotlin.math.roundToInt
 import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.model.Playlist
-import top.xiaojiang233.nekoplayer.ui.components.MiniPlayer
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 
@@ -214,7 +213,7 @@ fun PlaylistScreen(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 80.dp)
+                contentPadding = PaddingValues(bottom = if (nowPlaying != null) 80.dp else 0.dp)
             ) {
                 item {
                     PlaylistHeader(
@@ -338,16 +337,7 @@ fun PlaylistScreen(
                     }
                 }
             }
-            if (nowPlaying != null) {
-                MiniPlayer(
-                    isPlaying = isPlaying,
-                    nowPlaying = nowPlaying,
-                    onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .clickable { onPlayerClick() }
-                )
-            }
+
         }
     }
 }

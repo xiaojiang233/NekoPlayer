@@ -39,6 +39,15 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
     private val _currentLyricIndex = MutableStateFlow(-1)
     val currentLyricIndex = _currentLyricIndex.asStateFlow()
 
+    private val _lyricSearchResults = MutableStateFlow<List<OnlineSong>>(emptyList())
+    val lyricSearchResults = _lyricSearchResults.asStateFlow()
+
+    private val _isSearchingLyrics = MutableStateFlow(false)
+    val isSearchingLyrics = _isSearchingLyrics.asStateFlow()
+
+    private val _customCover = MutableStateFlow<Any?>(null)
+    val customCover = _customCover.asStateFlow()
+
     private val player
         get() = musicServiceConnection.getMediaController()
 
@@ -48,9 +57,11 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
                 if (mediaItem != null) {
                     val extras = mediaItem.mediaMetadata.extras ?: mediaItem.requestMetadata.extras
                     val lyricUrl = extras?.getString("lyricUrl")
-                    loadLyrics(lyricUrl)
+                    loadLyrics(lyricUrl, mediaItem.requestMetadata.mediaUri)
+                    loadCustomCover(mediaItem)
                 } else {
                     _lyrics.value = emptyList()
+                    _customCover.value = null
                 }
             }
         }
@@ -77,6 +88,26 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
         }
     }
 
+    private fun loadCustomCover(mediaItem: MediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+             val title = mediaItem.mediaMetadata.title?.toString() ?: ""
+             val artist = mediaItem.mediaMetadata.artist?.toString() ?: ""
+             var foundCover: Any? = null
+             if (title.isNotEmpty()) {
+                 val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                 val safeArtist = artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                 val fileNameBase = "$safeTitle - $safeArtist".trim()
+                 val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
+                 val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+                 val coverFile = File(musicDir, "$fileNameBase.jpg")
+                 if (coverFile.exists()) {
+                     foundCover = coverFile
+                 }
+             }
+             _customCover.value = foundCover
+        }
+    }
+
     fun playSong(song: OnlineSong) {
         playPlaylist(listOf(song), 0)
     }
@@ -91,10 +122,28 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
         player?.play()
     }
 
-    private fun loadLyrics(lyricUrl: String?) {
+    private fun loadLyrics(lyricUrl: String?, mediaUri: android.net.Uri? = null) {
         viewModelScope.launch(Dispatchers.IO) {
+            var sidecarLyrics: List<LyricLine>? = null
+            val song = nowPlaying.value
+            if (song != null) {
+                 val title = song.mediaMetadata.title?.toString() ?: ""
+                 val artist = song.mediaMetadata.artist?.toString() ?: ""
+                 if (title.isNotEmpty()) {
+                     val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                     val safeArtist = artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                     val fileNameBase = "$safeTitle - $safeArtist".trim()
+                     val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
+                     val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+                     val lrcFile = File(musicDir, "$fileNameBase.lrc")
+                     if (lrcFile.exists()) {
+                         sidecarLyrics = LyricsParser.parseFile(lrcFile)
+                     }
+                 }
+            }
+
             try {
-                val lyricsList = if (!lyricUrl.isNullOrBlank()) {
+                val lyricsList = sidecarLyrics ?: if (!lyricUrl.isNullOrBlank()) {
                     if (lyricUrl.startsWith("http")) {
                         val content = URL(lyricUrl).readText()
                         LyricsParser.parse(content)
@@ -106,6 +155,9 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
                             emptyList()
                         }
                     }
+                } else if (mediaUri != null && (mediaUri.scheme == "file" || mediaUri.scheme == "content")) {
+                    // Try to read embedded lyrics
+                    readEmbeddedLyrics(mediaUri)
                 } else {
                     emptyList()
                 }
@@ -114,6 +166,35 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
                 e.printStackTrace()
                 _lyrics.value = emptyList()
             }
+        }
+    }
+
+    private suspend fun readEmbeddedLyrics(uri: android.net.Uri): List<LyricLine> {
+        val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
+        return try {
+            // Copy to temp file to read tags
+            val tempFile = File.createTempFile("temp_lyrics", ".mp3", context.cacheDir)
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            org.jaudiotagger.tag.TagOptionSingleton.getInstance().isAndroid = true
+            val audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
+            val tag = audioFile.tag
+            val lyricsContent = tag?.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
+
+            tempFile.delete()
+
+            if (!lyricsContent.isNullOrBlank()) {
+                LyricsParser.parse(lyricsContent)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
     }
 
@@ -225,6 +306,50 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
     class Factory(private val musicServiceConnection: MusicServiceConnection) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return PlayerViewModel(musicServiceConnection) as T
+        }
+    }
+
+    fun searchLyrics(query: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSearchingLyrics.value = true
+            try {
+                val response = top.xiaojiang233.nekoplayer.data.network.RetrofitInstance.musicApiService.searchSongs(keyword = query, limit = 50)
+                if (response.code == 200) {
+                    _lyricSearchResults.value = response.data.results
+                } else {
+                    _lyricSearchResults.value = emptyList()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _lyricSearchResults.value = emptyList()
+            } finally {
+                _isSearchingLyrics.value = false
+            }
+        }
+    }
+
+    fun clearSearchResults() {
+        _lyricSearchResults.value = emptyList()
+    }
+
+    fun applyMetadata(selectedMatch: OnlineSong) {
+        val current = nowPlaying.value ?: return
+
+        val targetSong = OnlineSong(
+            id = current.mediaId,
+            title = current.mediaMetadata.title.toString(),
+            artist = current.mediaMetadata.artist.toString(),
+            album = current.mediaMetadata.albumTitle.toString(),
+            platform = "local",
+            songUrl = current.requestMetadata.mediaUri.toString(),
+            coverUrl = null,
+            lyricUrl = null
+        )
+
+        viewModelScope.launch {
+            top.xiaojiang233.nekoplayer.data.repository.SongRepository.updateSongMetadata(targetSong, selectedMatch)
+            // Reload lyrics
+            loadLyrics(null, current.requestMetadata.mediaUri)
         }
     }
 }
