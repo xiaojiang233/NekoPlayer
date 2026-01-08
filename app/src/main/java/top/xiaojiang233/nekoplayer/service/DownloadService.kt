@@ -46,7 +46,7 @@ class DownloadService : Service() {
         // Must call startForeground() within 5 seconds of startForegroundService()
         // even if we are about to stop.
         val initialNotification = createNotification(song?.title ?: "Music", "Preparing...")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(NOTIFICATION_ID, initialNotification)
@@ -164,17 +164,19 @@ class DownloadService : Service() {
         var currentUrl = url
         var redirects = 0
         while (redirects < redirectLimit) {
-            val connection = URL(currentUrl).openConnection() as HttpURLConnection
+            val u = URL(currentUrl)
+            val connection = u.openConnection() as HttpURLConnection
             connection.instanceFollowRedirects = false // We handle redirects manually.
             connection.connectTimeout = 15000 // 15s
             connection.readTimeout = 15000 // 15s
 
             val status = connection.responseCode
             if (status in 300..308) { // HTTP_MOVED_PERM, HTTP_MOVED_TEMP, HTTP_SEE_OTHER, etc.
-                val newUrl = connection.getHeaderField("Location")
+                val location = connection.getHeaderField("Location")
                 connection.disconnect()
-                if (newUrl != null) {
-                    currentUrl = newUrl
+                if (location != null) {
+                    val nextUrl = URL(u, location).toExternalForm()
+                    currentUrl = nextUrl
                     redirects++
                     continue
                 }

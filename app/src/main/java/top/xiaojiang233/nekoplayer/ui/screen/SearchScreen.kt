@@ -1,6 +1,7 @@
 package top.xiaojiang233.nekoplayer.ui.screen
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -262,36 +264,45 @@ fun SearchScreen(
                                 trailingContent = {
                                     val song = group.songs.firstOrNull()
                                     if (song != null) {
-                                        val state = downloadState[song.id] ?: SongRepository.DownloadState.None
-                                        when (state) {
-                                            is SongRepository.DownloadState.None -> {
-                                                IconButton(onClick = {
-                                                    val intent = Intent(context, DownloadService::class.java).apply {
-                                                        putExtra(DownloadService.EXTRA_SONG, song)
+                                        val isWatch = context.packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH) || (LocalConfiguration.current.screenWidthDp < 300)
+                                        if (!isWatch) {
+                                            val state = downloadState[song.id] ?: SongRepository.DownloadState.None
+                                            when (state) {
+                                                is SongRepository.DownloadState.None -> {
+                                                    IconButton(onClick = {
+                                                        val intent = Intent(context, DownloadService::class.java).apply {
+                                                            putExtra(DownloadService.EXTRA_SONG, song)
+                                                        }
+                                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                                            context.startForegroundService(intent)
+                                                        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                                            context.startForegroundService(intent)
+                                                        } else {
+                                                            context.startService(intent)
+                                                        }
+                                                    }) {
+                                                        Icon(Icons.Default.Download, contentDescription = stringResource(R.string.download))
                                                     }
-                                                    context.startService(intent)
-                                                }) {
-                                                    Icon(Icons.Default.Download, contentDescription = stringResource(R.string.download))
                                                 }
-                                            }
-                                            is SongRepository.DownloadState.Downloading -> {
-                                                CircularProgressIndicator(
-                                                    progress = state.progress,
-                                                    modifier = Modifier.size(24.dp),
-                                                    strokeWidth = 2.dp
-                                                )
-                                            }
-                                            is SongRepository.DownloadState.Downloaded -> {
-                                                IconButton(onClick = { searchViewModel.deleteSong(song) }) {
-                                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
+                                                is SongRepository.DownloadState.Downloading -> {
+                                                    CircularProgressIndicator(
+                                                        progress = state.progress,
+                                                        modifier = Modifier.size(24.dp),
+                                                        strokeWidth = 2.dp
+                                                    )
                                                 }
-                                            }
-                                            is SongRepository.DownloadState.Failed -> {
-                                                Icon(
-                                                    Icons.Default.Error,
-                                                    contentDescription = stringResource(R.string.download_failed_msg, state.message),
-                                                    tint = MaterialTheme.colorScheme.error
-                                                )
+                                                is SongRepository.DownloadState.Downloaded -> {
+                                                    IconButton(onClick = { searchViewModel.deleteSong(song) }) {
+                                                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
+                                                    }
+                                                }
+                                                is SongRepository.DownloadState.Failed -> {
+                                                    Icon(
+                                                        Icons.Default.Error,
+                                                        contentDescription = stringResource(R.string.download_failed_msg, state.message),
+                                                        tint = MaterialTheme.colorScheme.error
+                                                    )
+                                                }
                                             }
                                         }
                                     }

@@ -109,7 +109,14 @@ class MainActivity : ComponentActivity() {
 
             if (!dpiAdjusted && watchScale != 1.0f) {
                 val config = resources.configuration
+                // Store the original density if needed, or better yet, apply scale to the stable base density.
+                // However, resources.configuration.densityDpi changes after updateConfiguration.
+                // We shouldn't multiply repeatedly. But dpiAdjusted specifices this is done once per process lifecycle.
+                // Wait, if activity restarts in same process, dpiAdjusted is true.
+                // If it's a new process, dpiAdjusted is false.
+
                 config.densityDpi = (config.densityDpi * watchScale).toInt()
+                // Update configuration on the base context resource?
                 resources.updateConfiguration(config, resources.displayMetrics)
                 dpiAdjusted = true
             }
