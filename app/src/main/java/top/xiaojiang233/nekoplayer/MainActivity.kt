@@ -1,7 +1,9 @@
 package top.xiaojiang233.nekoplayer
 
+import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,15 +13,15 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.core.content.ContextCompat
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.wear.compose.material.MaterialTheme as WearMaterialTheme
@@ -34,6 +36,10 @@ import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        private var dpiAdjusted = false
+    }
+
     private lateinit var musicServiceConnection: MusicServiceConnection
     private val playerViewModel: PlayerViewModel by viewModels {
         PlayerViewModel.Factory(musicServiceConnection)
@@ -46,32 +52,85 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val permissionRequestLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+        val audioGranted = permissions[audioPermission] == true ||
+                permissions.values.all { it } // Fallback if specific key missing
+
+        if (audioGranted) {
+            checkFirstLaunch()
+        }
+    }
+
+    private fun checkFirstLaunch() {
+        val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val isFirstLaunch = prefs.getBoolean("is_first_launch", true)
+        if (isFirstLaunch) {
+            homeViewModel.showLocalMusicSelection()
+        } else {
+            homeViewModel.loadLocalSongs()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         musicServiceConnection = MusicServiceConnection.getInstance(this)
 
-        val isWearable = packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH)
+        val isSystemWatch = packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH)
+        val metrics = resources.displayMetrics
+        val isWatchByResolution = metrics.widthPixels < 800 && metrics.heightPixels < 800
+        val isWearable = isSystemWatch || isWatchByResolution
 
-        if (!isWearable) {
+        if (isWearable) {
+            if (!resources.configuration.isScreenRound && !dpiAdjusted) {
+                val config = resources.configuration
+                config.densityDpi = (config.densityDpi * 1.6f).toInt()
+                resources.updateConfiguration(config, resources.displayMetrics)
+                dpiAdjusted = true
+            }
+        } else {
             enableEdgeToEdge()
         }
 
         setContent {
             val context = androidx.compose.ui.platform.LocalContext.current
             LaunchedEffect(Unit) {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    val permissions = arrayOf(
-                        android.Manifest.permission.READ_MEDIA_AUDIO,
-                        android.Manifest.permission.POST_NOTIFICATIONS
-                    )
-                    if (permissions.any { androidx.core.content.ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }) {
-                        requestPermissions(permissions, 0)
-                    }
+                val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Manifest.permission.READ_MEDIA_AUDIO
                 } else {
-                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                        requestPermissions(arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE), 0)
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                }
+
+                val permissionsToRequest = mutableListOf<String>()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
+                    permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    permissionsToRequest.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                }
+
+                val audioGranted = ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
+
+                if (audioGranted) {
+                    // Audio permission already granted, check first launch
+                    android.util.Log.d("MainActivity", "Audio permission already granted, checking first launch")
+                    checkFirstLaunch()
+                } else {
+                    // Need to request permissions
+                    android.util.Log.d("MainActivity", "Requesting permissions")
+                    val permissionsNotGranted = permissionsToRequest.filter {
+                        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
                     }
+                    permissionRequestLauncher.launch(permissionsNotGranted.toTypedArray())
                 }
             }
 
@@ -86,11 +145,10 @@ class MainActivity : ComponentActivity() {
             } else {
                 NekoPlayerTheme {
                     Surface(color = MaterialTheme.colorScheme.background) {
-                        val navController = rememberNavController() // Hoist controller app-level
+                        val navController = rememberNavController()
                         val navBackStackEntry by navController.currentBackStackEntryAsState()
                         val currentRoute = navBackStackEntry?.destination?.route
 
-                        // Root container holds navigation and the app-level MiniPlayer overlay
                         Box(modifier = Modifier.fillMaxSize()) {
                             AppNavigation(
                                 playerViewModel = playerViewModel,
@@ -99,7 +157,6 @@ class MainActivity : ComponentActivity() {
                                 navController = navController
                             )
 
-                            // App-level MiniPlayer overlay (visible when there is a nowPlaying item AND not on Player screen)
                             val isPlaying by playerViewModel.isPlaying.collectAsState()
                             val nowPlaying by playerViewModel.nowPlaying.collectAsState()
                             val customCover by playerViewModel.customCover.collectAsState()
@@ -115,9 +172,7 @@ class MainActivity : ComponentActivity() {
                                         .align(if (isLandscape) Alignment.BottomEnd else Alignment.BottomCenter)
                                         .padding(if (isLandscape) androidx.compose.ui.unit.Dp(16f) else androidx.compose.ui.unit.Dp(10f)),
                                     customCover = customCover,
-                                    onMiniPlayerClick = {
-                                        navController.navigate(Routes.PLAYER) // Navigate to player
-                                    }
+                                    onMiniPlayerClick = { navController.navigate(Routes.PLAYER) }
                                 )
                             }
                         }
@@ -126,17 +181,4 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
-
-@Composable
-fun WearApp(
-    playerViewModel: PlayerViewModel,
-    homeViewModel: HomeViewModel,
-    onAddMusicClick: () -> Unit
-) {
-    WearAppNavigation(
-        playerViewModel = playerViewModel,
-        homeViewModel = homeViewModel,
-        onAddMusicClick = onAddMusicClick
-    )
 }

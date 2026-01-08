@@ -1,10 +1,12 @@
 package top.xiaojiang233.nekoplayer.data.repository
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.net.Uri
 import android.os.Environment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,10 +20,11 @@ import top.xiaojiang233.nekoplayer.data.model.Playlist
 import java.io.File
 import java.util.UUID
 
+@SuppressLint("StaticFieldLeak")
 object PlaylistRepository {
     private val context = NekoPlayerApplication.getAppContext()
     private val playlistsDir = File(context.filesDir, "playlists")
-    private val playlistCoversDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "NekoMusic/CoverImage")
+    private val playlistCoversDir = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "NekoPlayerCovers")
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
@@ -82,30 +85,15 @@ object PlaylistRepository {
 
     fun addSongsToPlaylist(playlist: Playlist, songs: List<OnlineSong>) {
         val updatedSongIds = (playlist.songIds + songs.map { it.id }).distinct()
-        val updated = playlist.copy(songIds = updatedSongIds)
-        savePlaylist(updated)
-
-        // Update cover if needed (e.g. if it was empty or we want to refresh)
-        // For now, let's update cover every time we add songs if it's less than 4 or just refresh it
-        // To get song objects from IDs, we need SongRepository.
-        // But SongRepository depends on us? No. We depend on SongRepository?
-        // Circular dependency risk if we use SongRepository here directly if SongRepository uses PlaylistRepository.
-        // SongRepository doesn't seem to use PlaylistRepository.
-
-        val allSongs = SongRepository.getLocalSongs().filter { it.id in updatedSongIds }
-        updatePlaylistCover(updated, allSongs)
-
+        val allSongs = (SongRepository.getLocalSongs() + songs).distinctBy { it.id }.filter { song -> song.id in updatedSongIds }
+        updatePlaylistCover(playlist.copy(songIds = updatedSongIds), allSongs)
         loadPlaylists()
     }
 
     fun removeSongFromPlaylist(playlist: Playlist, songId: String) {
         val updatedSongIds = playlist.songIds - songId
-        val updated = playlist.copy(songIds = updatedSongIds)
-        savePlaylist(updated)
-
         val allSongs = SongRepository.getLocalSongs().filter { it.id in updatedSongIds }
-        updatePlaylistCover(updated, allSongs)
-
+        updatePlaylistCover(playlist.copy(songIds = updatedSongIds), allSongs)
         loadPlaylists()
     }
 
@@ -116,7 +104,8 @@ object PlaylistRepository {
 
     fun updateSongsOrder(playlist: Playlist, newSongIds: List<String>) {
         val updated = playlist.copy(songIds = newSongIds)
-        savePlaylist(updated)
+        val songsForCover = SongRepository.getLocalSongs().filter { it.id in newSongIds }
+        updatePlaylistCover(updated, songsForCover)
         loadPlaylists()
     }
 
@@ -140,82 +129,75 @@ object PlaylistRepository {
     }
 
     private fun updatePlaylistCover(playlist: Playlist, songs: List<OnlineSong>) {
-        // Generate a grid cover (2x2) from the first 4 songs
-        if (songs.isEmpty()) return
+        if (songs.isEmpty()) {
+            val coverFile = File(playlistCoversDir, "${playlist.id}.jpg")
+            if (coverFile.exists()) coverFile.delete()
+            savePlaylist(playlist.copy(coverUrl = null))
+            return
+        }
 
         val coverSize = 500 // px
-        val bitmap = Bitmap.createBitmap(coverSize, coverSize, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint()
+        val resultBitmap = Bitmap.createBitmap(coverSize, coverSize, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(resultBitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         val songsToUse = songs.take(4)
-        val cellSize = if (songsToUse.size == 1) coverSize else coverSize / 2
+        val cellSize = if (songsToUse.size <= 1) coverSize else coverSize / 2
 
         songsToUse.forEachIndexed { index, song ->
-            val path = song.songUrl // Local path
-            // We need cover image.
-            // If song is local, we might need to extract cover or use cached cover.
-            // SongRepository saves coverUrl as null for local songs but we might have a cache or embedded art.
-            // For local files, we can try to load using Coil or BitmapFactory if we have the path.
-            // But here we are in Repository, no Coil.
-            // We can try to use MediaMetadataRetriever or check if there is a cached cover.
-
-            // Try to find cached cover first
-            val cachedCover = File(context.cacheDir, "${song.id}.jpg")
             var songBitmap: Bitmap? = null
+            val safeTitle = song.title.replace(Regex("[\\/:*?\"<>|]"), "_")
+            val safeArtist = song.artist.replace(Regex("[\\/:*?\"<>|]"), "_")
+            val fileNameBase = "$safeTitle - $safeArtist".trim()
+            val musicDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+            val cachedCover = if (musicDir != null) File(musicDir, "$fileNameBase.jpg") else null
 
-            if (cachedCover.exists()) {
+            if (cachedCover?.exists() == true) {
                 songBitmap = BitmapFactory.decodeFile(cachedCover.absolutePath)
             } else if (song.songUrl != null) {
-                 // Try to extract from audio file
-                 try {
-                     val mmr = android.media.MediaMetadataRetriever()
-                     mmr.setDataSource(song.songUrl)
-                     val data = mmr.embeddedPicture
-                     if (data != null) {
-                         songBitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-                     }
-                     mmr.release()
-                 } catch (e: Exception) {
-                     e.printStackTrace()
-                 }
+                val mmr = android.media.MediaMetadataRetriever()
+                try {
+                    mmr.setDataSource(context, Uri.parse(song.songUrl))
+                    mmr.embeddedPicture?.let { data ->
+                        songBitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    mmr.release()
+                }
             }
 
+            val x = (index % 2) * cellSize
+            val y = (index / 2) * cellSize
+
             if (songBitmap != null) {
-                val x = (index % 2) * cellSize
-                val y = (index / 2) * cellSize
-                // Scale bitmap
-                val scaled = Bitmap.createScaledBitmap(songBitmap, cellSize, cellSize, true)
+                val scaled = Bitmap.createScaledBitmap(songBitmap!!, cellSize, cellSize, true)
                 canvas.drawBitmap(scaled, x.toFloat(), y.toFloat(), paint)
-                if (songBitmap != scaled) songBitmap.recycle()
+                songBitmap!!.recycle()
+                if (scaled != songBitmap) scaled.recycle()
             } else {
-                // Draw placeholder color
-                paint.color = android.graphics.Color.GRAY
-                val x = (index % 2) * cellSize
-                val y = (index / 2) * cellSize
+                paint.color = android.graphics.Color.DKGRAY
                 canvas.drawRect(x.toFloat(), y.toFloat(), (x + cellSize).toFloat(), (y + cellSize).toFloat(), paint)
             }
         }
 
         val coverFile = File(playlistCoversDir, "${playlist.id}.jpg")
-        coverFile.outputStream().use {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, it)
+        try {
+            coverFile.outputStream().use { resultBitmap.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+            savePlaylist(playlist.copy(coverUrl = coverFile.absolutePath))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            resultBitmap.recycle()
         }
-
-        // Update playlist with cover path
-        val updated = playlist.copy(coverUrl = coverFile.absolutePath)
-        savePlaylist(updated)
     }
 
     fun savePlaylists(playlists: List<Playlist>) {
         if (!playlistsDir.exists()) playlistsDir.mkdirs()
-        playlists.forEach { playlist ->
-            savePlaylist(playlist)
-        }
+        playlists.forEach { savePlaylist(it) }
         loadPlaylists()
     }
 
-    fun getAllPlaylists(): List<Playlist> {
-        return _playlists.value
-    }
+    fun getAllPlaylists(): List<Playlist> = _playlists.value
 }

@@ -132,52 +132,48 @@ fun MiniPlayer(
                 }
             }
         } else if (isLandscape) {
-            Box(
-                modifier = modifier.padding(16.dp),
-                contentAlignment = Alignment.BottomEnd
+            Row(
+                modifier = modifier
+                    .padding(16.dp)
+                    .widthIn(max = 400.dp)
+                    .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(backgroundColor)
+                    .clickable(enabled = onMiniPlayerClick != null) { onMiniPlayerClick?.invoke() }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
+                AsyncImage(
+                    model = displayAlbumArt,
+                    contentDescription = "Album Art",
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+                )
+                Column(
                     modifier = Modifier
-                        .widthIn(max = 400.dp)
-                        .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp))
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(backgroundColor)
-                        .clickable(enabled = onMiniPlayerClick != null) { onMiniPlayerClick?.invoke() }
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(start = 12.dp)
+                        .weight(1f)
                 ) {
-                    AsyncImage(
-                        model = displayAlbumArt,
-                        contentDescription = "Album Art",
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+                    Text(
+                        text = nowPlaying.mediaMetadata.title.toString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Column(
-                        modifier = Modifier
-                            .padding(start = 12.dp)
-                            .weight(1f)
-                    ) {
-                        Text(
-                            text = nowPlaying.mediaMetadata.title.toString(),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = contentColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = nowPlaying.mediaMetadata.artist.toString(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = contentColor.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    IconButton(onClick = onPlayPauseClick) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = contentColor
-                        )
-                    }
+                    Text(
+                        text = nowPlaying.mediaMetadata.artist.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = contentColor.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                IconButton(onClick = onPlayPauseClick) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = contentColor
+                    )
                 }
             }
         } else {

@@ -24,6 +24,12 @@ class HomeViewModel : ViewModel() {
     private val _localSongs = MutableStateFlow<List<OnlineSong>>(emptyList())
     val localSongs: StateFlow<List<OnlineSong>> = _localSongs
 
+    private val _showLocalMusicSelection = MutableStateFlow(false)
+    val showLocalMusicSelection: StateFlow<Boolean> = _showLocalMusicSelection
+
+    private val _availableLocalSongs = MutableStateFlow<List<OnlineSong>>(emptyList())
+    val availableLocalSongs: StateFlow<List<OnlineSong>> = _availableLocalSongs
+
     val playlists: StateFlow<List<Playlist>> = playlistRepository.playlists
 
     val viewMode: StateFlow<ViewMode> = settingsRepository.viewMode
@@ -32,6 +38,19 @@ class HomeViewModel : ViewModel() {
 
     enum class ViewMode {
         List, Grid
+    }
+
+    init {
+
+        // Monitor download state changes and refresh when downloads complete
+        viewModelScope.launch {
+            songRepository.downloadState.collect { stateMap ->
+                // If any song just finished downloading, refresh the list
+                if (stateMap.values.any { it is SongRepository.DownloadState.Downloaded }) {
+                    loadLocalSongs()
+                }
+            }
+        }
     }
 
     fun toggleViewMode() {
@@ -93,7 +112,9 @@ class HomeViewModel : ViewModel() {
 
     fun importSongs(uris: List<Uri>) {
         viewModelScope.launch {
-            uris.forEach { songRepository.addLocalSong(it) }
+            uris.forEach {
+                songRepository.addLocalSong(it)
+            }
             loadLocalSongs()
         }
     }
@@ -116,5 +137,63 @@ class HomeViewModel : ViewModel() {
             playlistRepository.updatePlaylistsOrder(playlists)
         }
     }
-}
 
+    fun showLocalMusicSelection() {
+        android.util.Log.d("HomeViewModel", "showLocalMusicSelection called")
+        viewModelScope.launch {
+            // Get all available local music from MediaStore
+            val songs = songRepository.getAllMediaStoreMusic()
+            android.util.Log.d("HomeViewModel", "Found ${songs.size} songs from MediaStore")
+            _availableLocalSongs.value = songs
+            _showLocalMusicSelection.value = true
+            android.util.Log.d("HomeViewModel", "Dialog should show now: ${_showLocalMusicSelection.value}")
+        }
+    }
+
+    fun setShowLocalMusicSelection(show: Boolean) {
+        if (!show && _showLocalMusicSelection.value) {
+            // User is dismissing the dialog
+            viewModelScope.launch {
+                // Check if it's first launch
+                val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
+                val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+                val isFirstLaunch = prefs.getBoolean("is_first_launch", true)
+
+                if (isFirstLaunch) {
+                    // User dismissed without selecting anything - hide all songs
+                    val allSongs = songRepository.getAllMediaStoreMusic()
+                    songRepository.setHiddenSongs(allSongs.map { it.id }.toSet())
+
+                    // Mark as non-first launch
+                    prefs.edit().putBoolean("is_first_launch", false).apply()
+                }
+            }
+        }
+        _showLocalMusicSelection.value = show
+    }
+
+    fun addLocalSongs(selectedSongs: List<OnlineSong>) {
+        viewModelScope.launch {
+            // Get all MediaStore songs
+            val allSongs = songRepository.getAllMediaStoreMusic()
+
+            // Songs NOT selected should be hidden
+            val unselectedSongIds = allSongs
+                .filter { it !in selectedSongs }
+                .map { it.id }
+                .toSet()
+
+            // Update hidden songs list
+            songRepository.setHiddenSongs(unselectedSongIds)
+
+            // Now load local songs (which will filter out hidden ones)
+            loadLocalSongs()
+            _showLocalMusicSelection.value = false
+
+            // Mark as non-first launch now that user has made a choice
+            val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
+            val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("is_first_launch", false).apply()
+        }
+    }
+}

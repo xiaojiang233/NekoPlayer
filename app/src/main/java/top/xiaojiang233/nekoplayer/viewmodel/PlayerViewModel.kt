@@ -13,7 +13,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
+import top.xiaojiang233.nekoplayer.data.repository.SettingsRepository
 import top.xiaojiang233.nekoplayer.service.connection.MusicServiceConnection
 import top.xiaojiang233.nekoplayer.utils.LyricLine
 import top.xiaojiang233.nekoplayer.utils.LyricsParser
@@ -48,10 +50,21 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
     private val _customCover = MutableStateFlow<Any?>(null)
     val customCover = _customCover.asStateFlow()
 
+    private var playbackDelay = 0
+    private var fadeInDuration = 0
+
     private val player
         get() = musicServiceConnection.getMediaController()
 
     init {
+        viewModelScope.launch {
+            SettingsRepository.playbackDelay.collect { playbackDelay = it }
+        }
+
+        viewModelScope.launch {
+            SettingsRepository.fadeInDuration.collect { fadeInDuration = it }
+        }
+
         viewModelScope.launch {
             nowPlaying.collect { mediaItem ->
                 if (mediaItem != null) {
@@ -94,17 +107,89 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
              val artist = mediaItem.mediaMetadata.artist?.toString() ?: ""
              var foundCover: Any? = null
              if (title.isNotEmpty()) {
-                 val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                 val safeArtist = artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                 val safeTitle = title.replace(Regex("[\\/:*?\"<>|]"), "_")
+                 val safeArtist = artist.replace(Regex("[\\/:*?\"<>|]"), "_")
                  val fileNameBase = "$safeTitle - $safeArtist".trim()
                  val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
                  val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
                  val coverFile = File(musicDir, "$fileNameBase.jpg")
                  if (coverFile.exists()) {
                      foundCover = coverFile
+                 } else {
+                     // Try extracting embedded artwork and save it
+                     try {
+                         val mediaUri = mediaItem.requestMetadata.mediaUri
+                         if (mediaUri != null) {
+                             val saved = top.xiaojiang233.nekoplayer.data.repository.SongRepository.saveEmbeddedCoverForMediaUri(mediaUri, fileNameBase, mediaItem.mediaId)
+                             if (saved && coverFile.exists()) {
+                                 foundCover = coverFile
+                                 // After saving embedded cover, refresh media metadata so system controls show artwork
+                                 withContext(Dispatchers.Main) {
+                                     refreshNowPlayingMetadata()
+                                 }
+                             }
+                         }
+                     } catch (e: Exception) {
+                         e.printStackTrace()
+                     }
                  }
              }
              _customCover.value = foundCover
+        }
+    }
+
+    // Convert MediaItem to OnlineSong for rebuilding MediaItem metadata
+    private fun mediaItemToOnlineSong(item: MediaItem): OnlineSong {
+        val meta = item.mediaMetadata
+        val extras = meta.extras ?: item.requestMetadata.extras
+        val title = meta.title?.toString() ?: extras?.getString("title") ?: ""
+        val artist = meta.artist?.toString() ?: extras?.getString("artist") ?: ""
+        val album = meta.albumTitle?.toString() ?: extras?.getString("album")
+        val coverUrl = extras?.getString("coverUrl")
+        val lyricUrl = extras?.getString("lyricUrl")
+        val platform = extras?.getString("platform") ?: "local"
+        val songUrl = item.requestMetadata.mediaUri?.toString()
+
+        return OnlineSong(
+            id = item.mediaId,
+            title = title,
+            artist = artist,
+            album = album,
+            platform = platform,
+            songUrl = songUrl,
+            coverUrl = coverUrl,
+            lyricUrl = lyricUrl
+        )
+    }
+
+    // Rebuild and replace the current media item metadata so media session and UI update
+    private fun refreshNowPlayingMetadata() {
+        viewModelScope.launch(Dispatchers.Main) {
+            val p = player ?: return@launch
+            val currentIndex = p.currentMediaItemIndex
+            if (currentIndex < 0) return@launch
+            val currentPosition = p.currentPosition
+            val wasPlaying = p.isPlaying
+
+            val itemCount = p.mediaItemCount
+            val items = mutableListOf<MediaItem>()
+            for (i in 0 until itemCount) {
+                val item = p.getMediaItemAt(i)
+                if (i == currentIndex) {
+                    val song = mediaItemToOnlineSong(item)
+                    items.add(createMediaItem(song))
+                } else {
+                    items.add(item)
+                }
+            }
+
+            try {
+                p.setMediaItems(items, currentIndex, currentPosition)
+                p.prepare()
+                if (wasPlaying) p.play()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -115,11 +200,25 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
     fun playPlaylist(songs: List<OnlineSong>, startIndex: Int) {
         if (songs.isEmpty()) return
 
-        val mediaItems = songs.map { createMediaItem(it) }
+        viewModelScope.launch {
+            val mediaItems = songs.map { createMediaItem(it) }
 
-        player?.setMediaItems(mediaItems, startIndex, 0)
-        player?.prepare()
-        player?.play()
+            player?.setMediaItems(mediaItems, startIndex, 0)
+            player?.prepare()
+            player?.play()
+
+            // Apply delay and fade-in
+            delay(playbackDelay.toLong())
+            if (fadeInDuration > 0) {
+                val steps = 20
+                val stepDuration = fadeInDuration.toLong() / steps
+                for (i in 1..steps) {
+                    player?.volume = i / steps.toFloat()
+                    delay(stepDuration)
+                }
+            }
+            player?.volume = 1f
+        }
     }
 
     private fun loadLyrics(lyricUrl: String?, mediaUri: android.net.Uri? = null) {
@@ -263,16 +362,44 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
             s.songUrl?.toUri()
         }
 
-        val coverUri = if (s.coverUrl?.startsWith("/") == true) {
+        // Try to get cover URI from multiple sources
+        var coverUri = if (s.coverUrl?.startsWith("/") == true) {
             File(s.coverUrl).toUri()
-        } else {
+        } else if (s.coverUrl?.startsWith("http") == true) {
             s.coverUrl?.toUri()
+        } else {
+            null
+        }
+
+        // For local music (platform="local") or when no http cover, try to find downloaded cover file
+        if (s.platform == "local" || coverUri == null) {
+            try {
+                val safeTitle = s.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val safeArtist = s.artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val fileNameBase = "$safeTitle - $safeArtist".trim()
+                val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
+                val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+                val coverFile = File(musicDir, "$fileNameBase.jpg")
+                if (coverFile.exists()) {
+                    coverUri = coverFile.toUri()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // If still no cover URI and we have a content URI from coverUrl, use it
+        // This allows AudioCoverFetcher to extract embedded album art in UI,
+        // but for MediaSession we prefer actual file URIs
+        if (coverUri == null && s.coverUrl?.startsWith("content://") == true) {
+            coverUri = s.coverUrl.toUri()
         }
 
         val extras = Bundle().apply {
             putString("title", s.title)
             putString("artist", s.artist)
-            putString("coverUrl", s.coverUrl)
+            // Put resolved coverUri string so MediaLibrarySession callback can use it
+            putString("coverUrl", coverUri?.toString())
             putString("platform", s.platform)
             putString("lyricUrl", s.lyricUrl)
         }
@@ -350,6 +477,50 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
             top.xiaojiang233.nekoplayer.data.repository.SongRepository.updateSongMetadata(targetSong, selectedMatch)
             // Reload lyrics
             loadLyrics(null, current.requestMetadata.mediaUri)
+            // Refresh metadata and artwork
+            refreshNowPlayingMetadata()
+        }
+    }
+
+    fun importLrcFile(uri: android.net.Uri) {
+        val current = nowPlaying.value ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
+
+                // Use the same location and naming pattern as loadLyrics
+                val title = current.mediaMetadata.title?.toString() ?: ""
+                val artist = current.mediaMetadata.artist?.toString() ?: ""
+
+                if (title.isEmpty()) return@launch
+
+                val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val safeArtist = artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val fileNameBase = "$safeTitle - $safeArtist".trim()
+
+                val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+                if (musicDir != null && !musicDir.exists()) {
+                    musicDir.mkdirs()
+                }
+
+                val lrcFile = File(musicDir, "$fileNameBase.lrc")
+
+                // Copy content from URI to storage
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    lrcFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                // Reload lyrics
+                withContext(Dispatchers.Main) {
+                    loadLyrics(null, current.requestMetadata.mediaUri)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }
+

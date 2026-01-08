@@ -1,10 +1,13 @@
 package top.xiaojiang233.nekoplayer.ui.components
 
-import androidx.compose.foundation.clickable
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,12 +28,17 @@ fun LyricsSearchDialog(
     onSearch: (String) -> Unit,
     results: List<OnlineSong>,
     isSearching: Boolean,
-    onSelect: (OnlineSong) -> Unit
+    onSelect: (OnlineSong) -> Unit,
+    onImportLrc: ((Uri) -> Unit)? = null
 ) {
     var query by remember { mutableStateOf(initialQuery) }
 
-    // Trigger initial search if query is not empty? Maybe wait for user action.
-    // Let's autofill and let user click search.
+    // File picker for lrc files
+    val lrcFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { onImportLrc?.invoke(it) }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -59,6 +67,23 @@ fun LyricsSearchDialog(
                     )
                     IconButton(onClick = { onSearch(query) }) {
                         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search))
+                    }
+                }
+
+                // Import LRC button
+                if (onImportLrc != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { lrcFilePicker.launch("*/*") },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.FileUpload,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.import_local_lrc))
                     }
                 }
 

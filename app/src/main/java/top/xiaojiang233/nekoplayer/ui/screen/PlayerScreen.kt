@@ -1,5 +1,7 @@
 package top.xiaojiang233.nekoplayer.ui.screen
 
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -9,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -42,18 +45,22 @@ import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import java.io.File
+import kotlin.math.pow
+import kotlin.math.sqrt
 import top.xiaojiang233.nekoplayer.R
-import top.xiaojiang233.nekoplayer.util.findActivity
+import top.xiaojiang233.nekoplayer.utils.findActivity
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.SettingsViewModel
-import top.xiaojiang233.nekoplayer.ui.components.LyricsSearchDialog
 
+@SuppressLint("LocalContextResourcesRead")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayerScreen(
     viewModel: PlayerViewModel,
     settingsViewModel: SettingsViewModel = viewModel(),
-    onCloseClick: () -> Unit
+    onCloseClick: () -> Unit,
+    // Add override for explicit wearable mode if needed, default to auto-detect
+    isWearableOverride: Boolean? = null
 ) {
     val isPlaying by viewModel.isPlaying.collectAsState()
     val nowPlaying by viewModel.nowPlaying.collectAsState()
@@ -74,7 +81,19 @@ fun PlayerScreen(
     }
 
     val configuration = LocalConfiguration.current
-    val isWearable = configuration.screenWidthDp < 300
+    val context = LocalContext.current
+
+    val isWearable = isWearableOverride ?: remember(configuration) {
+        val pm = context.packageManager
+        val isWatchFeature = pm.hasSystemFeature(PackageManager.FEATURE_WATCH)
+
+        val metrics = context.resources.displayMetrics
+        val widthInches = metrics.widthPixels / metrics.xdpi
+        val heightInches = metrics.heightPixels / metrics.ydpi
+        val diagonalInches = sqrt(widthInches.pow(2) + heightInches.pow(2))
+
+        isWatchFeature || diagonalInches < 2.4 || configuration.screenWidthDp < 250 // Expanded logic for "modified" watches
+    }
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
     // Hide system bars in landscape
@@ -114,13 +133,13 @@ fun PlayerScreen(
 
     val pagerState = rememberPagerState(pageCount = { 2 })
 
+    // Single root Box: background (blur), dark overlay, content and top-right close button
     Box(modifier = Modifier.fillMaxSize()) {
         Crossfade(
             targetState = displayAlbumArt,
             label = "BackgroundCrossfade",
             animationSpec = tween(500)
         ) { art ->
-            val context = LocalContext.current
             val imageModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 art
             } else {
@@ -144,81 +163,95 @@ fun PlayerScreen(
                 modifier = backgroundModifier
             )
         }
+
+        // dark overlay to improve readability (still allow blur on wearables)
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
 
-        if (isWearable) {
-            // Wearable layout
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                PlayerControls(
-                    isWearable = true,
-                    displayAlbumArt = displayAlbumArt,
-                    title = title.toString(),
-                    artist = artist.toString(),
-                    platform = platform,
-                    showPlatformTag = showPlatformTag,
-                    totalDuration = totalDuration,
-                    currentPosition = currentPosition,
-                    isDragging = isSliderDragging,
-                    sliderPosition = sliderPosition,
-                    isPlaying = isPlaying,
-                    repeatMode = repeatMode,
-                    shuffleMode = shuffleMode,
-                    onValueChange = { sliderPosition = it },
-                    onValueChangeFinished = { viewModel.seekTo(sliderPosition.toLong()) },
-                    onDragChange = { dragging -> isSliderDragging = dragging },
-                    onPlayPauseClick = { viewModel.onPlayPauseClick() },
-                    onPreviousClick = { viewModel.skipToPrevious() },
-                    onNextClick = { viewModel.skipToNext() },
-                    onPlaybackModeClick = { viewModel.cyclePlaybackMode() }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                LyricsScreen(viewModel)
+        // content (player / lyrics / pager)
+        if (isLandscape && !isWearable) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    PlayerControls(
+                        isWearable = false,
+                        displayAlbumArt = displayAlbumArt,
+                        title = title.toString(),
+                        artist = artist.toString(),
+                        platform = platform,
+                        showPlatformTag = showPlatformTag,
+                        totalDuration = totalDuration,
+                        currentPosition = currentPosition,
+                        isDragging = isSliderDragging,
+                        sliderPosition = sliderPosition,
+                        isPlaying = isPlaying,
+                        repeatMode = repeatMode,
+                        shuffleMode = shuffleMode,
+                        onValueChange = { sliderPosition = it },
+                        onValueChangeFinished = { viewModel.seekTo(sliderPosition.toLong()) },
+                        onDragChange = { dragging -> isSliderDragging = dragging },
+                        onPlayPauseClick = { viewModel.onPlayPauseClick() },
+                        onPreviousClick = { viewModel.skipToPrevious() },
+                        onNextClick = { viewModel.skipToNext() },
+                        onPlaybackModeClick = { viewModel.cyclePlaybackMode() }
+                    )
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    LyricsScreen(viewModel, isWearableOverride = isWearableOverride)
+                }
             }
         } else {
-            // Phone/Tablet layout
-            if (isLandscape) {
-                Row(modifier = Modifier.fillMaxSize()) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        PlayerControls(
-                            isWearable = false,
-                            displayAlbumArt = displayAlbumArt,
-                            title = title.toString(),
-                            artist = artist.toString(),
-                            platform = platform,
-                            showPlatformTag = showPlatformTag,
-                            totalDuration = totalDuration,
-                            currentPosition = currentPosition,
-                            isDragging = isSliderDragging,
-                            sliderPosition = sliderPosition,
-                            isPlaying = isPlaying,
-                            repeatMode = repeatMode,
-                            shuffleMode = shuffleMode,
-                            onValueChange = { sliderPosition = it },
-                            onValueChangeFinished = { viewModel.seekTo(sliderPosition.toLong()) },
-                            onDragChange = { dragging -> isSliderDragging = dragging },
-                            onPlayPauseClick = { viewModel.onPlayPauseClick() },
-                            onPreviousClick = { viewModel.skipToPrevious() },
-                            onNextClick = { viewModel.skipToNext() },
-                            onPlaybackModeClick = { viewModel.cyclePlaybackMode() }
-                        )
-                    }
-                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        LyricsScreen(viewModel)
+            // Portrait or Wearable
+            if (isWearable) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp, vertical = 24.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                PlayerControls(
+                                    isWearable = true,
+                                    displayAlbumArt = displayAlbumArt,
+                                    title = title.toString(),
+                                    artist = artist.toString(),
+                                    platform = platform,
+                                    showPlatformTag = showPlatformTag,
+                                    totalDuration = totalDuration,
+                                    currentPosition = currentPosition,
+                                    isDragging = isSliderDragging,
+                                    sliderPosition = sliderPosition,
+                                    isPlaying = isPlaying,
+                                    repeatMode = repeatMode,
+                                    shuffleMode = shuffleMode,
+                                    onValueChange = { sliderPosition = it },
+                                    onValueChangeFinished = { viewModel.seekTo(sliderPosition.toLong()) },
+                                    onDragChange = { dragging -> isSliderDragging = dragging },
+                                    onPlayPauseClick = { viewModel.onPlayPauseClick() },
+                                    onPreviousClick = { viewModel.skipToPrevious() },
+                                    onNextClick = { viewModel.skipToNext() },
+                                    onPlaybackModeClick = { viewModel.cyclePlaybackMode() }
+                                )
+                            }
+                        }
+                        1 -> {
+                            Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp)) {
+                                LyricsScreen(viewModel, isWearableOverride = isWearableOverride)
+                            }
+                        }
                     }
                 }
             } else {
@@ -255,13 +288,14 @@ fun PlayerScreen(
                             }
                         }
                         1 -> {
-                            LyricsScreen(viewModel)
+                            LyricsScreen(viewModel, isWearableOverride = isWearableOverride)
                         }
                     }
                 }
             }
         }
 
+        // top-right close button
         IconButton(
             onClick = onCloseClick,
             modifier = Modifier
@@ -295,12 +329,17 @@ fun CustomProgressBar(
     onDragChange: (Boolean) -> Unit = {}
 ) {
     var isDragging by remember { mutableStateOf(false) }
-    // Remove complex animations or optimize them
-    val thumbRadius = if (isDragging) 6.dp else 3.dp
-    val trackHeight = if (isDragging) 2.dp else 1.dp
+    var dragProgress by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(isDragging) {
         onDragChange(isDragging)
+    }
+
+    // Sync dragProgress with value when not dragging, or initialize when drag starts
+    LaunchedEffect(value) {
+        if (!isDragging) {
+            dragProgress = if (maxValue > 0) value / maxValue else 0f
+        }
     }
 
     Box(
@@ -312,6 +351,7 @@ fun CustomProgressBar(
                     onDragStart = { offset ->
                         isDragging = true
                         val newFraction = (offset.x / size.width).coerceIn(0f, 1f)
+                        dragProgress = newFraction
                         onValueChange(newFraction * maxValue)
                     },
                     onDragEnd = {
@@ -324,6 +364,7 @@ fun CustomProgressBar(
                     }
                 ) { change, _ ->
                     val newFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                    dragProgress = newFraction
                     onValueChange(newFraction * maxValue)
                 }
             }
@@ -332,6 +373,7 @@ fun CustomProgressBar(
                     onPress = { offset ->
                         isDragging = true
                         val newFraction = (offset.x / size.width).coerceIn(0f, 1f)
+                        dragProgress = newFraction
                         onValueChange(newFraction * maxValue)
                         tryAwaitRelease()
                         isDragging = false
@@ -341,35 +383,50 @@ fun CustomProgressBar(
             },
         contentAlignment = Alignment.Center
     ) {
-        // Optimize value calculations
-        val fraction = if (maxValue > 0) (value / maxValue).coerceIn(0f, 1f) else 0f
+        // Calculate dimensions based on drag state
+        val thumbRadius = if (isDragging) 6.dp else 3.dp
+        val trackHeight = if (isDragging) 2.dp else 1.dp
 
-        Canvas(modifier = Modifier.fillMaxWidth().height(trackHeight)) {
-            val trackCornerRadius = CornerRadius(size.height / 2)
+        // Use local dragProgress when dragging, otherwise calculated fraction
+        val fraction = if (isDragging) dragProgress else if (maxValue > 0) (value / maxValue).coerceIn(0f, 1f) else 0f
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(30.dp) // Fixed height to contain the thumb
+        ) {
+            val trackY = size.height / 2
+            val trackHeightPx = trackHeight.toPx()
+            val thumbRadiusPx = thumbRadius.toPx()
+            val trackCornerRadius = CornerRadius(trackHeightPx / 2)
 
             // Background track
             drawRoundRect(
                 color = Color.White.copy(alpha = 0.3f),
-                size = size,
+                topLeft = Offset(0f, trackY - trackHeightPx / 2),
+                size = androidx.compose.ui.geometry.Size(size.width, trackHeightPx),
                 cornerRadius = trackCornerRadius
             )
 
             // Progress track
+            val progressWidth = size.width * fraction
             drawRoundRect(
                 color = Color.White.copy(alpha = 0.7f),
-                size = size.copy(width = size.width * fraction),
+                topLeft = Offset(0f, trackY - trackHeightPx / 2),
+                size = androidx.compose.ui.geometry.Size(progressWidth, trackHeightPx),
                 cornerRadius = trackCornerRadius
             )
 
             // Thumb
             drawCircle(
                 color = Color.White.copy(alpha = 0.9f),
-                radius = thumbRadius.toPx(),
-                center = Offset(x = size.width * fraction, y = size.height / 2)
+                radius = thumbRadiusPx,
+                center = Offset(x = progressWidth, y = trackY)
             )
         }
     }
 }
+
 
 @Composable
 fun PlayerControls(
@@ -464,6 +521,7 @@ fun PlayerControls(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         val duration = totalDuration.coerceAtLeast(1L).toFloat()
+        // Always use sliderPosition when dragging to ensure real-time UI updates
         val position = if (isDragging) sliderPosition else currentPosition.toFloat()
 
         CustomProgressBar(
@@ -555,4 +613,5 @@ fun PlayerControls(
             }
         }
     }
+
 }

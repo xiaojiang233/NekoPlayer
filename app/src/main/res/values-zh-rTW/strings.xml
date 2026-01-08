@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PlaylistScreen -->
+    <string name="playlist_not_found">找不到播放清單</string>
+    <string name="go_back">返回</string>
+    <string name="add_songs">新增歌曲</string>
+    <string name="no_songs_available">沒有可新增的歌曲。</string>
+    <string name="add">新增</string>
+    <string name="cancel">取消</string>
+    <string name="selected_count">已選取 %1$d 首</string>
+    <string name="close_selection">關閉選取</string>
+    <string name="back">返回</string>
+    <string name="remove_selected">刪除所選</string>
+    <string name="play_all">播放全部</string>
+    <string name="song_count">%1$d 首歌曲</string>
+    <string name="drag_handle">拖曳</string>
+    <string name="cover_image">封面</string>
+    <string name="cover_image_for">%1$s 的封面</string>
+
+    <!-- HomeScreen -->
+    <string name="new_playlist">新增播放清單</string>
+    <string name="playlist_name">播放清單名稱</string>
+    <string name="create">建立</string>
+    <string name="rename_playlist">重新命名播放清單</string>
+    <string name="name">名稱</string>
+    <string name="rename">重新命名</string>
+    <string name="delete">刪除</string>
+    <string name="import_songs">匯入歌曲</string>
+    <string name="toggle_view">切換視圖</string>
+    <string name="settings">設定</string>
+    <string name="playlists_title">播放清單</string>
+    <string name="songs_title">歌曲</string>
+    <string name="delete_selected">刪除所選</string>
+    <string name="delete_playlist_message">確定要刪除「%1$s」嗎？</string>
+    <string name="drag">拖曳</string>
+
+    <!-- Generic -->
+    <string name="unknown_artist">未知演出者</string>
+    <string name="unknown_title">未知標題</string>
+    <string name="search">搜尋</string>
+    <string name="search_hint">搜尋歌曲</string>
+    <string name="search_history">搜尋歷史</string>
+    <string name="clear_history">清除歷史</string>
+    <string name="find_favorite_songs">尋找您最愛的歌曲</string>
+    <string name="download">下載</string>
+    <string name="lyrics">歌詞</string>
+    <string name="downloaded">已下載</string>
+    <string name="downloading">下載中...</string>
+
+    <!-- Settings -->
+    <string name="title_settings">設定</string>
+    <string name="clear_cache">清除快取</string>
+    <string name="clear_cache_desc">清除已下載的歌曲和圖片</string>
+    <string name="cache_cleared">快取已清除</string>
+    <string name="title_lyrics">歌詞</string>
+    <string name="font_size">字型大小: %1$d sp</string>
+    <string name="font_family">字型</string>
+    <string name="blur_intensity">模糊強度: %1$d</string>
+    <string name="title_player">播放器</string>
+    <string name="show_platform_tag">顯示平台標籤</string>
+    <string name="show_platform_tag_desc">在播放器的演出者名稱下方顯示平台標籤</string>
+    <string name="playback_delay">播放延遲: %1$d 毫秒</string>
+    <string name="fade_in_duration">淡入持續時間: %1$d 毫秒</string>
+    <string name="title_backup_restore">備份與還原</string>
+    <string name="export_config">匯出設定</string>
+    <string name="export_config_desc">儲存設定、歌曲和播放清單</string>
+    <string name="import_config">匯入設定</string>
+    <string name="import_config_desc">從備份檔案還原</string>
+    <string name="config_exported_success">設定匯出成功</string>
+    <string name="config_export_failed">匯出失敗: %1$s</string>
+    <string name="config_imported_success">設定匯入成功</string>
+    <string name="config_import_failed">匯入失败: %1$s</string>
+    <string name="import_failed_file_error">匯入失敗: 無法讀取檔案</string>
+    <string name="imported_to_library">已匯入至音樂庫</string>
+    <string name="import_song_failed">匯入歌曲失敗</string>
+    <string name="no_url">無連結</string>
+    <string name="downloaded_song">已下載 %1$s</string>
+    <string name="download_failed_msg">下載失敗: %1$s</string>
+    <string name="no_history">無歷史記錄</string>
+    <string name="title_search">搜尋</string>
+    <string name="add_local_music">新增本機音樂</string>
+    <string name="select_songs_to_add">選取要新增至音樂庫的歌曲</string>
+    <string name="found_songs">找到 %1$d 首歌曲</string>
+    <string name="no_local_music_found">未找到本機音樂</string>
+    <string name="select_none">全部取消</string>
+
+    <!-- Lyrics Search -->
+    <string name="no_lyrics">無歌詞</string>
+    <string name="search_lyrics">搜尋歌詞</string>
+    <string name="match_lyrics_cover">配對歌詞和封面</string>
+    <string name="song_title_artist">歌曲標題 / 演出者</string>
+
+    <!-- Wearable -->
+    <string name="now_playing">正在播放</string>
+    <string name="library">音樂庫</string>
+    <string name="locally_imported">本機匯入</string>
+    <string name="select_local_music">選取本機音樂</string>
+    <string name="add_selected">新增 (%1$d)</string>
+    <string name="select_all">全選</string>
+    <string name="deselect_all">全部取消</string>
+    <string name="clear">清除</string>
+    <string name="playback_mode">播放模式</string>
+    <string name="previous">上一首</string>
+    <string name="play">播放</string>
+    <string name="pause">暫停</string>
+    <string name="next">下一首</string>
+    <string name="close">關閉</string>
+    <string name="album_art">專輯封面</string>
+
+    <!-- About Section -->
+    <string name="title_about">關於</string>
+    <string name="version">版本: %1$s</string>
+    <string name="author">作者: xiaojiang233</string>
+    <string name="github">Github</string>
+</resources>

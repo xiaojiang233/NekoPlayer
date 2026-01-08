@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- PlaylistScreen -->
     <string name="playlist_not_found">歌单未找到</string>
@@ -15,7 +16,6 @@
     <string name="drag_handle">拖动</string>
     <string name="cover_image">封面</string>
     <string name="cover_image_for">%1$s 的封面</string>
-
 
     <!-- HomeScreen -->
     <string name="new_playlist">新建歌单</string>
@@ -89,7 +89,6 @@
     <string name="search_lyrics">搜索歌词</string>
     <string name="match_lyrics_cover">匹配歌词和封面</string>
     <string name="song_title_artist">歌曲标题 / 艺术家</string>
-    <string name="import_local_lrc">导入本地 LRC 文件</string>
 
     <!-- Wearable -->
     <string name="now_playing">正在播放</string>
@@ -113,5 +112,4 @@
     <string name="version">版本: %1$s</string>
     <string name="author">作者: xiaojiang233</string>
     <string name="github">Github</string>
-
 </resources>

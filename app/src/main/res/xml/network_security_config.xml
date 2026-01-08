@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext traffic for all domains (for music streaming services) -->
+    <!-- This is needed because some music APIs return HTTP URLs instead of HTTPS -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Alternatively, you can specify specific domains if you want to be more restrictive:
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">sycdn.kuwo.cn</domain>
+        <domain includeSubdomains="true">music-dl.sayqz.com</domain>
+    </domain-config>
+    -->
+</network-security-config>
+

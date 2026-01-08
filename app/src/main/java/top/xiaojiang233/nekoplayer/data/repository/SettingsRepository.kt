@@ -1,11 +1,13 @@
 package top.xiaojiang233.nekoplayer.data.repository
 
+import android.annotation.SuppressLint
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -13,12 +15,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
-import top.xiaojiang233.nekoplayer.NekoPlayerApplication
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import top.xiaojiang233.nekoplayer.NekoPlayerApplication
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
+@SuppressLint("StaticFieldLeak")
 object SettingsRepository {
     private val context = NekoPlayerApplication.getAppContext()
     private val dataStore = context.dataStore
@@ -30,6 +33,9 @@ object SettingsRepository {
     private val SEARCH_HISTORY_KEY = stringSetPreferencesKey("search_history")
     private val SEARCH_HISTORY_JSON_KEY = stringPreferencesKey("search_history_json")
     private val VIEW_MODE_KEY = stringPreferencesKey("view_mode")
+    private val PLAYBACK_DELAY_KEY = intPreferencesKey("playback_delay")
+    private val FADE_IN_DURATION_KEY = intPreferencesKey("fade_in_duration")
+
 
     val lyricsFontSize: Flow<Float> = dataStore.data.map { preferences ->
         preferences[LYRICS_FONT_SIZE_KEY] ?: 28f
@@ -64,6 +70,15 @@ object SettingsRepository {
     val viewMode: Flow<String> = dataStore.data.map { preferences ->
         preferences[VIEW_MODE_KEY] ?: "List"
     }
+
+    val playbackDelay: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[PLAYBACK_DELAY_KEY] ?: 0
+    }
+
+    val fadeInDuration: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[FADE_IN_DURATION_KEY] ?: 0
+    }
+
 
     suspend fun setLyricsFontSize(size: Float) {
         dataStore.edit { preferences ->
@@ -121,13 +136,27 @@ object SettingsRepository {
         }
     }
 
+    suspend fun setPlaybackDelay(delay: Int) {
+        dataStore.edit { preferences ->
+            preferences[PLAYBACK_DELAY_KEY] = delay
+        }
+    }
+
+    suspend fun setFadeInDuration(duration: Int) {
+        dataStore.edit { preferences ->
+            preferences[FADE_IN_DURATION_KEY] = duration
+        }
+    }
+
     @Serializable
     data class SettingsData(
         val lyricsFontSize: Float,
         val lyricsFontFamily: String,
         val lyricsBlurIntensity: Float,
         val showPlatformTag: Boolean,
-        val viewMode: String = "List"
+        val viewMode: String = "List",
+        val playbackDelay: Int = 0,
+        val fadeInDuration: Int = 0
     )
 
     suspend fun getAllSettings(): SettingsData {
@@ -137,7 +166,9 @@ object SettingsRepository {
             lyricsFontFamily = preferences[LYRICS_FONT_FAMILY_KEY] ?: "Default",
             lyricsBlurIntensity = preferences[LYRICS_BLUR_INTENSITY_KEY] ?: 10f,
             showPlatformTag = preferences[SHOW_PLATFORM_TAG_KEY] ?: true,
-            viewMode = preferences[VIEW_MODE_KEY] ?: "List"
+            viewMode = preferences[VIEW_MODE_KEY] ?: "List",
+            playbackDelay = preferences[PLAYBACK_DELAY_KEY] ?: 0,
+            fadeInDuration = preferences[FADE_IN_DURATION_KEY] ?: 0
         )
     }
 
@@ -147,6 +178,8 @@ object SettingsRepository {
             preferences[LYRICS_FONT_FAMILY_KEY] = settings.lyricsFontFamily
             preferences[LYRICS_BLUR_INTENSITY_KEY] = settings.lyricsBlurIntensity
             preferences[SHOW_PLATFORM_TAG_KEY] = settings.showPlatformTag
+            preferences[PLAYBACK_DELAY_KEY] = settings.playbackDelay
+            preferences[FADE_IN_DURATION_KEY] = settings.fadeInDuration
         }
     }
 }

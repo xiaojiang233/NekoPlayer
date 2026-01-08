@@ -12,6 +12,7 @@ import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.request.Options
 import java.io.File
+import org.jaudiotagger.audio.AudioFileIO
 
 class AudioCoverFetcher(
     private val uri: Uri,
@@ -19,9 +20,44 @@ class AudioCoverFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? {
+        val context = options.context
+
+        // Try Jaudiotagger for local files first
+        if (uri.scheme == "file") {
+            try {
+                val path = uri.path
+                if (path != null) {
+                    val file = File(path)
+                    if (file.exists()) {
+                         try {
+                            val audioFile = AudioFileIO.read(file)
+                            val artwork = audioFile.tag?.firstArtwork
+                            val binaryData = artwork?.binaryData
+                            if (binaryData != null) {
+                                val bitmap = BitmapFactory.decodeByteArray(binaryData, 0, binaryData.size)
+                                return DrawableResult(
+                                    drawable = BitmapDrawable(context.resources, bitmap),
+                                    isSampled = false,
+                                    dataSource = DataSource.DISK
+                                )
+                            }
+                        } catch (e: Exception) {
+                            // Jaudiotagger failed, fall back to MediaMetadataRetriever
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+
         val retriever = MediaMetadataRetriever()
         return try {
-            retriever.setDataSource(options.context, uri)
+            if (uri.scheme == "file") {
+                retriever.setDataSource(uri.path)
+            } else {
+                retriever.setDataSource(context, uri)
+            }
             val coverBytes = retriever.embeddedPicture
             if (coverBytes != null) {
                 val bitmap = BitmapFactory.decodeByteArray(coverBytes, 0, coverBytes.size)

@@ -14,7 +14,7 @@ android {
         minSdk = 25
         targetSdk = 35
         versionCode = 1
-        versionName = "1.1"
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -64,6 +64,7 @@ dependencies {
     implementation(libs.androidx.wear.compose.foundation)
     implementation(libs.androidx.wear.compose.material)
     implementation(libs.androidx.wear.compose.navigation)
+    implementation(libs.androidx.wear.input)
 
     // Retrofit for networking
     implementation(libs.retrofit)
@@ -93,6 +94,9 @@ dependencies {
     // DataStore
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.compose.material3)
+    implementation(libs.androidx.compose.foundation.layout)
+    implementation(libs.androidx.foundation)
+    implementation(libs.androidx.ui)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

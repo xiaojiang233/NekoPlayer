@@ -62,7 +62,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.ui.components.LyricsSearchDialog
-import top.xiaojiang233.nekoplayer.util.findActivity
+import top.xiaojiang233.nekoplayer.utils.findActivity
 import kotlin.math.abs
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.SettingsViewModel
@@ -70,7 +70,8 @@ import top.xiaojiang233.nekoplayer.viewmodel.SettingsViewModel
 @Composable
 fun LyricsScreen(
     viewModel: PlayerViewModel,
-    settingsViewModel: SettingsViewModel = viewModel()
+    settingsViewModel: SettingsViewModel = viewModel(),
+    isWearableOverride: Boolean? = null
 ) {
     val lyrics by viewModel.lyrics.collectAsState()
     val currentPosition by viewModel.currentPosition.collectAsState()
@@ -82,6 +83,29 @@ fun LyricsScreen(
 
     var isUserScrolling by remember { mutableStateOf(false) }
     var showSearchDialog by remember { mutableStateOf(false) }
+
+    val configuration = LocalConfiguration.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Detect if running on wearable
+    val isWearable = isWearableOverride ?: remember(configuration) {
+        val pm = context.packageManager
+        val isWatchFeature = pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_WATCH)
+
+        val metrics = context.resources.displayMetrics
+        val widthInches = metrics.widthPixels / metrics.xdpi
+        val heightInches = metrics.heightPixels / metrics.ydpi
+        val diagonalInches = kotlin.math.sqrt(widthInches * widthInches + heightInches * heightInches)
+
+        isWatchFeature || diagonalInches < 2.4 || configuration.screenWidthDp < 250
+    }
+
+    // Adjust font size for wearable
+    val adjustedFontSize = if (isWearable) {
+        (lyricsFontSize * 0.6f).coerceAtLeast(12f)
+    } else {
+        lyricsFontSize.toFloat()
+    }
 
     if (showSearchDialog) {
         val searchResults by viewModel.lyricSearchResults.collectAsState()
@@ -103,6 +127,10 @@ fun LyricsScreen(
                 viewModel.applyMetadata(song)
                 showSearchDialog = false
                 viewModel.clearSearchResults()
+            },
+            onImportLrc = { uri ->
+                viewModel.importLrcFile(uri)
+                showSearchDialog = false
             }
         )
     }
@@ -115,7 +143,6 @@ fun LyricsScreen(
         else -> FontFamily.Default
     }
 
-    val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
     val view = LocalView.current
@@ -151,7 +178,7 @@ fun LyricsScreen(
                 }
             }
             lyrics.forEachIndexed { index, lyric ->
-                add(LyricItem.Content(lyric.time, lyric.text))
+                add(LyricItem.Content(lyric.time, lyric.text, lyric.translation))
                 val nextTime = lyrics.getOrNull(index + 1)?.time
                 if (nextTime != null && nextTime - lyric.time >= 10_000) {
                     // Insert interlude item starting 5s after current line
@@ -163,7 +190,9 @@ fun LyricsScreen(
 
     val currentDisplayIndex by remember(currentPosition, displayLyrics) {
         derivedStateOf {
-            displayLyrics.indexOfLast { it.time <= currentPosition }.coerceAtLeast(-1)
+            // Add a small offset (200ms early) to compensate for visual delay
+            val adjustedPosition = currentPosition + 200
+            displayLyrics.indexOfLast { it.time <= adjustedPosition }.coerceAtLeast(-1)
         }
     }
 
@@ -181,15 +210,41 @@ fun LyricsScreen(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val containerHeight = maxHeight
 
-        val verticalPadding = if (isLandscape) {
-            containerHeight * 0.45f
-        } else {
-            containerHeight * 0.42f
+        // Check if current lyric has translation to adjust padding dynamically
+        val currentHasTranslation = remember(currentDisplayIndex, displayLyrics) {
+            if (currentDisplayIndex >= 0 && currentDisplayIndex < displayLyrics.size) {
+                val item = displayLyrics[currentDisplayIndex]
+                item is LyricItem.Content && !item.translation.isNullOrBlank()
+            } else {
+                false
+            }
         }
+
+        // Adjust padding for wearable (less padding for round screens)
+        // Dynamically adjust padding in both portrait and landscape modes when current lyric has translation
+        val verticalPadding = if (isWearable) {
+            containerHeight * 0.35f
+        } else if (isLandscape) {
+            // Landscape mode: also adjust padding when translation exists
+            if (currentHasTranslation) {
+                containerHeight * 0.30f
+            } else {
+                containerHeight * 0.40f
+            }
+        } else {
+            // Portrait mode: increase padding when translation exists to keep focus higher
+            if (currentHasTranslation) {
+                containerHeight * 0.35f
+            } else {
+                containerHeight * 0.40f
+            }
+        }
+
+        // Horizontal padding - less for wearable to avoid clipping on round screens
+        val horizontalPadding = if (isWearable) 16.dp else 32.dp
 
         LaunchedEffect(currentDisplayIndex, isUserScrolling) {
             if (currentDisplayIndex >= 0 && !isUserScrolling) {
@@ -234,43 +289,34 @@ fun LyricsScreen(
 
                     val scale by animateFloatAsState(
                         targetValue = if (isCurrent) 1f else 0.95f,
-                        animationSpec = tween(durationMillis = 500),
+                        animationSpec = tween(durationMillis = 300),
                         label = "scale"
                     )
 
                     val targetAlpha = if (isUserScrolling) 0.6f else (1f - (distance * 0.15f)).coerceIn(0.1f, 1f)
                     val animatedAlpha by animateFloatAsState(
                         targetValue = if (isCurrent) 1f else targetAlpha,
-                        animationSpec = tween(durationMillis = 500),
+                        animationSpec = tween(durationMillis = 300),
                         label = "alpha"
                     )
 
                     val targetBlur = if (isUserScrolling) 1f else if (isCurrent) 0f else (distance * 2f * (lyricsBlurIntensity / 10f)).coerceAtMost(lyricsBlurIntensity)
                     val blurRadius by animateFloatAsState(
                         targetValue = targetBlur,
-                        animationSpec = tween(durationMillis = 500),
+                        animationSpec = tween(durationMillis = 300),
                         label = "blur"
                     )
 
                     when (item) {
                         is LyricItem.Content -> {
-                            Text(
-                                text = item.text,
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = lyricsFontSize.sp,
-                                    lineHeight = (lyricsFontSize * 1.4).sp,
-                                    fontFamily = fontFamily
-                                ),
-                                color = Color.White,
-                                textAlign = TextAlign.Start,
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 32.dp, vertical = 12.dp)
+                                    .padding(horizontal = horizontalPadding, vertical = 12.dp)
                                     .graphicsLayer {
                                         alpha = 0.99f
                                         clip = false
-                                    } // Fix blur artifacts
+                                    }
                                     .scale(scale)
                                     .alpha(animatedAlpha)
                                     .blur(blurRadius.dp)
@@ -278,7 +324,38 @@ fun LyricsScreen(
                                         viewModel.seekTo(item.time)
                                         isUserScrolling = false
                                     }
-                            )
+                            ) {
+                                // Main lyric text (original)
+                                Text(
+                                    text = item.text,
+                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = adjustedFontSize.sp,
+                                        lineHeight = (adjustedFontSize * 1.4).sp,
+                                        fontFamily = fontFamily
+                                    ),
+                                    color = Color.White,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                // Translation text (if exists) - smaller font
+                                if (!item.translation.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = item.translation,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Normal,
+                                            fontSize = (adjustedFontSize * 0.7f).sp,
+                                            lineHeight = (adjustedFontSize * 0.7f * 1.3).sp,
+                                            fontFamily = fontFamily
+                                        ),
+                                        color = Color.White.copy(alpha = 0.75f),
+                                        textAlign = TextAlign.Start,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
                         }
                         is LyricItem.Interlude -> {
                             val duration = item.endTime - item.time
@@ -303,7 +380,7 @@ fun LyricsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 32.dp, vertical = 12.dp)
+                                    .padding(horizontal = horizontalPadding, vertical = 12.dp)
                                     .graphicsLayer {
                                         alpha = 0.99f
                                         clip = false
@@ -318,19 +395,20 @@ fun LyricsScreen(
                                 horizontalArrangement = Arrangement.Start,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val dotSize = (lyricsFontSize * 0.8).dp
-                                val spacing = 16.dp // Slightly wider spacing
+                                val dotSize = (adjustedFontSize * 0.8).dp
+                                val spacing = if (isWearable) 12.dp else 16.dp
 
                                 for (i in 0 until 3) {
-                                    // Dot 2 (rightmost) disappears first (when progress > 0.33).
-                                    // Dot 1 (middle) disappears when progress > 0.66.
-                                    // Dot 0 (leftmost) disappears when progress > 1.0.
-                                    val disappearThreshold = (3 - i) * 0.33f
+                                    // Make dots disappear faster and earlier for smoother transition
+                                    // Dot 2 (rightmost) disappears at 25% progress
+                                    // Dot 1 (middle) disappears at 50% progress
+                                    // Dot 0 (leftmost) disappears at 75% progress
+                                    val disappearThreshold = (3 - i) * 0.25f
                                     val isVisible = progress < disappearThreshold
 
                                     val fadeAlpha by animateFloatAsState(
                                         targetValue = if (isVisible) 1f else 0f,
-                                        animationSpec = tween(durationMillis = 300, easing = LinearEasing),
+                                        animationSpec = tween(durationMillis = 150, easing = LinearEasing),
                                         label = "fadeAlpha$i"
                                     )
 
@@ -356,6 +434,6 @@ fun LyricsScreen(
 
 sealed interface LyricItem {
     val time: Long
-    data class Content(override val time: Long, val text: String) : LyricItem
+    data class Content(override val time: Long, val text: String, val translation: String? = null) : LyricItem
     data class Interlude(override val time: Long, val endTime: Long) : LyricItem
 }

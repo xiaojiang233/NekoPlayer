@@ -6,10 +6,12 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import androidx.wear.compose.navigation.composable
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import top.xiaojiang233.nekoplayer.ui.screen.WearHomeScreen
-import top.xiaojiang233.nekoplayer.ui.screen.wear.WearPlaceholderScreen
+
+import top.xiaojiang233.nekoplayer.ui.screen.wear.WearPlaylistScreen
 import top.xiaojiang233.nekoplayer.ui.screen.wear.WearSearchScreen
+import top.xiaojiang233.nekoplayer.ui.screen.wear.WearSettingsScreen
 import top.xiaojiang233.nekoplayer.ui.screen.PlayerScreen
+import top.xiaojiang233.nekoplayer.ui.screen.WearHomeScreen
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 
@@ -29,13 +31,12 @@ fun WearAppNavigation(
                 onSearchClick = { navController.navigate(Routes.SEARCH) },
                 onPlayerClick = { navController.navigate(Routes.PLAYER) },
                 onSettingsClick = { navController.navigate(Routes.SETTINGS) },
-                onAddMusicClick = onAddMusicClick,
+                onAddMusicClick = onAddMusicClick, // Pass the lambda here
                 onPlaylistClick = { playlistId -> navController.navigate("playlist/$playlistId") }
             )
         }
         composable(Routes.SEARCH) {
             WearSearchScreen(
-                playerViewModel = playerViewModel,
                 onSongClick = { song ->
                     // Play and jump to Player screen
                     playerViewModel.playSong(song)
@@ -44,18 +45,17 @@ fun WearAppNavigation(
             )
         }
         composable(Routes.SETTINGS) {
-            WearPlaceholderScreen(screenName = "Settings")
+            WearSettingsScreen(
+                onBackClick = { navController.popBackStack() }
+            )
         }
         composable(Routes.PLAYER) {
             // Replace placeholder with actual PlayerScreen, adapted for Wear
-            // By passing isWearable=true (inferred from configuration inside PlayerScreen if we didn't remove it or logic is there)
-            // But I removed `isWearable` parameter from PlayerScreen signature before.
-            // PlayerScreen logic now automatically detects configuration.
-            // However, Wear navigation passes control here.
-            // I should use the existing PlayerScreen which handles `isWearable` check internally via `LocalConfiguration`.
+            // Explicitly pass isWearableOverride = true
             PlayerScreen(
                 viewModel = playerViewModel,
-                onCloseClick = { navController.popBackStack() }
+                onCloseClick = { navController.popBackStack() },
+                isWearableOverride = true
             )
         }
         composable(
@@ -63,7 +63,14 @@ fun WearAppNavigation(
             arguments = listOf(navArgument("playlistId") { type = NavType.StringType })
         ) { backStackEntry ->
             val playlistId = backStackEntry.arguments?.getString("playlistId")
-            WearPlaceholderScreen(screenName = "Playlist: ${playlistId ?: "Unknown"}")
+            if (playlistId != null) {
+                WearPlaylistScreen(
+                    playlistId = playlistId,
+                    homeViewModel = homeViewModel,
+                    playerViewModel = playerViewModel,
+                    onSongClick = { navController.navigate(Routes.PLAYER) }
+                )
+            }
         }
     }
 }

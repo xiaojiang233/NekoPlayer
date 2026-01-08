@@ -3,12 +3,17 @@ package top.xiaojiang233.nekoplayer.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.network.RetrofitInstance
-import top.xiaojiang233.nekoplayer.data.repository.SongRepository
 import top.xiaojiang233.nekoplayer.data.repository.SettingsRepository
+import top.xiaojiang233.nekoplayer.data.repository.SongRepository
 
 data class SongGroup(
     val title: String,
@@ -122,14 +127,10 @@ class SearchViewModel : ViewModel() {
     }
 
     fun downloadSong(song: OnlineSong) {
-        viewModelScope.launch {
-            songRepository.downloadSong(song)
-        }
+        songRepository.downloadSong(song)
     }
 
     fun deleteSong(song: OnlineSong) {
-        viewModelScope.launch {
-            songRepository.deleteSong(song)
-        }
+        songRepository.deleteSong(song)
     }
 }

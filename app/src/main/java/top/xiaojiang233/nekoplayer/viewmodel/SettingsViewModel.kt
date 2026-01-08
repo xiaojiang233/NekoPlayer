@@ -5,23 +5,22 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import top.xiaojiang233.nekoplayer.NekoPlayerApplication
+import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.model.Playlist
 import top.xiaojiang233.nekoplayer.data.repository.PlaylistRepository
-
-import top.xiaojiang233.nekoplayer.data.repository.SongRepository
 import top.xiaojiang233.nekoplayer.data.repository.SettingsRepository
+import top.xiaojiang233.nekoplayer.data.repository.SongRepository
 import java.io.File
-import top.xiaojiang233.nekoplayer.R
 
 @Serializable
 data class BackupData(
@@ -50,6 +49,13 @@ class SettingsViewModel : ViewModel() {
     val showPlatformTag: StateFlow<Boolean> = settingsRepository.showPlatformTag
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val playbackDelay: StateFlow<Int> = settingsRepository.playbackDelay
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val fadeInDuration: StateFlow<Int> = settingsRepository.fadeInDuration
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+
     fun clearCache() {
         viewModelScope.launch {
             songRepository.clearCache()
@@ -77,6 +83,18 @@ class SettingsViewModel : ViewModel() {
     fun setShowPlatformTag(show: Boolean) {
         viewModelScope.launch {
             settingsRepository.setShowPlatformTag(show)
+        }
+    }
+
+    fun setPlaybackDelay(delay: Int) {
+        viewModelScope.launch {
+            settingsRepository.setPlaybackDelay(delay)
+        }
+    }
+
+    fun setFadeInDuration(duration: Int) {
+        viewModelScope.launch {
+            settingsRepository.setFadeInDuration(duration)
         }
     }
 

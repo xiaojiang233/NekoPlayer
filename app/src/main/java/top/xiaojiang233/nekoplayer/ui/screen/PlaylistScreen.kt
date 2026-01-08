@@ -1,6 +1,7 @@
 package top.xiaojiang233.nekoplayer.ui.screen
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -9,18 +10,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.DragIndicator
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -50,13 +50,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import java.io.File
-import kotlin.math.roundToInt
 import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.model.Playlist
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
+import java.io.File
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -218,7 +218,7 @@ fun PlaylistScreen(
                 item {
                     PlaylistHeader(
                         playlist = playlist,
-                        songCount = playlistSongs.size,
+                        songs = playlistSongs,
                         onPlayAll = {
                             if (playlistSongs.isNotEmpty()) {
                                 playerViewModel.playPlaylist(playlistSongs, 0)
@@ -343,30 +343,85 @@ fun PlaylistScreen(
 }
 
 @Composable
-fun PlaylistHeader(playlist: Playlist, songCount: Int, onPlayAll: () -> Unit) {
+fun PlaylistCoverGrid(songs: List<OnlineSong>) {
+    val imageModifier = Modifier
+        .aspectRatio(1f)
+        .clip(RoundedCornerShape(0.dp)) // No rounding at the individual image level
+
+    if (songs.isEmpty()) {
+        // Show a placeholder if there are no songs
+        Box(
+            modifier = Modifier
+                .size(200.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = stringResource(R.string.cover_image),
+                modifier = Modifier.size(80.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    } else {
+        // Use a 2x2 grid for the song covers
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier
+                .size(200.dp)
+                .clip(RoundedCornerShape(16.dp)),
+            userScrollEnabled = false,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            items(songs.take(4)) { song ->
+                AsyncImage(
+                    model = song.coverUrl ?: song.songUrl?.let { url ->
+                        if (url.startsWith("/")) File(url) else null
+                    },
+                    contentDescription = stringResource(R.string.cover_image_for, song.title),
+                    modifier = imageModifier,
+                    contentScale = ContentScale.Crop,
+                    placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                    error = rememberVectorPainter(Icons.Default.MusicNote)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaylistHeader(playlist: Playlist, songs: List<OnlineSong>, onPlayAll: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AsyncImage(
-            model = playlist.coverUrl,
-            contentDescription = stringResource(R.string.cover_image),
-            modifier = Modifier
-                .size(200.dp)
-                .clip(RoundedCornerShape(16.dp)),
-            contentScale = ContentScale.Crop,
-            placeholder = rememberVectorPainter(Icons.Default.MusicNote),
-            error = rememberVectorPainter(Icons.Default.MusicNote)
-        )
+        // If there's a specific coverUrl, use it. Otherwise, generate the grid.
+        if (playlist.coverUrl != null) {
+            AsyncImage(
+                model = playlist.coverUrl,
+                contentDescription = stringResource(R.string.cover_image),
+                modifier = Modifier
+                    .size(200.dp)
+                    .clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Crop,
+                placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                error = rememberVectorPainter(Icons.Default.MusicNote)
+            )
+        } else {
+            PlaylistCoverGrid(songs = songs)
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = playlist.name,
             style = MaterialTheme.typography.headlineMedium
         )
         Text(
-            text = stringResource(R.string.song_count, songCount),
+            text = stringResource(R.string.song_count, songs.size),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

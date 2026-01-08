@@ -1,64 +1,267 @@
 package top.xiaojiang233.nekoplayer.ui.screen.wear
 
+import android.app.RemoteInput
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
-import androidx.wear.compose.material.*
+import androidx.wear.compose.material.Button
+import androidx.wear.compose.material.ButtonDefaults
+import androidx.wear.compose.material.Card
+import androidx.wear.compose.material.Chip
+import androidx.wear.compose.material.ChipDefaults
+import androidx.wear.compose.material.CircularProgressIndicator
+import androidx.wear.compose.material.CompactChip
+import androidx.wear.compose.material.Icon
+import androidx.wear.compose.material.ListHeader
+import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.dialog.Dialog
+import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
-import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
+import top.xiaojiang233.nekoplayer.data.repository.SongRepository
+import top.xiaojiang233.nekoplayer.utils.launchTextInput
 import top.xiaojiang233.nekoplayer.viewmodel.SearchViewModel
 
 @Composable
 fun WearSearchScreen(
     searchViewModel: SearchViewModel = viewModel(),
-    playerViewModel: PlayerViewModel,
     onSongClick: (OnlineSong) -> Unit
 ) {
     val searchQuery by searchViewModel.searchQuery.collectAsState()
     val groupedSearchResults by searchViewModel.groupedSearchResults.collectAsState()
     val isLoading by searchViewModel.isLoading.collectAsState()
+    val searchHistory by searchViewModel.searchHistory.collectAsState()
+    val downloadState by searchViewModel.downloadState.collectAsState()
+
+    var selectedSong by remember { mutableStateOf<OnlineSong?>(null) }
+    val context = LocalContext.current
+    val searchHint = stringResource(id = R.string.search_hint)
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        result.data?.let { data ->
+            val results = RemoteInput.getResultsFromIntent(data)
+            results?.getCharSequence("search_query")?.toString()?.let {
+                searchViewModel.onSearchQueryChange(it)
+                searchViewModel.searchSongs()
+            }
+        }
+    }
 
     ScalingLazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp)
     ) {
         item {
-            // On Wear OS, text input is typically handled by launching a system activity.
-            // For simplicity, we use a Chip to trigger a search for a predefined query.
-            // A real implementation would use RemoteInput to get user input.
             Chip(
-                label = { Text(if (searchQuery.isEmpty()) "Search" else searchQuery) },
-                onClick = { /* TODO: Implement text input, e.g., using RemoteInput */ },
-                icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                label = { Text(if (searchQuery.isEmpty()) stringResource(R.string.search) else searchQuery) },
+                onClick = {
+                    launchTextInput(
+                        context = context,
+                        launcher = launcher,
+                        remoteInputKey = "search_query",
+                        label = searchHint
+                    ) { query ->
+                        searchViewModel.onSearchQueryChange(query)
+                        searchViewModel.searchSongs()
+                    }
+                },
+                icon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search)) },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
             )
         }
 
-        if (isLoading) {
+        if (searchQuery.isEmpty()) {
+            if (searchHistory.isNotEmpty()) {
+                item { ListHeader { Text(stringResource(R.string.search_history)) } }
+                items(searchHistory) { history ->
+                    Chip(
+                        label = { Text(history) },
+                        onClick = {
+                            searchViewModel.onSearchQueryChange(history)
+                            searchViewModel.searchSongs()
+                        },
+                        icon = { Icon(Icons.Default.History, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ChipDefaults.secondaryChipColors()
+                    )
+                }
+                item {
+                    CompactChip(
+                        label = { Text(stringResource(R.string.clear_history)) },
+                        onClick = { searchViewModel.clearHistory() },
+                        icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        } else if (isLoading && groupedSearchResults.isEmpty()) {
             item {
                 CircularProgressIndicator()
             }
         } else {
             items(groupedSearchResults) { group ->
                 Card(
-                    onClick = { 
-                        group.songs.firstOrNull()?.let { onSongClick(it) }
-                    },
+                    onClick = { group.songs.firstOrNull()?.let { selectedSong = it } },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                 ) {
-                    Text(text = group.title, modifier = Modifier.padding(8.dp), maxLines = 1)
-                    Text(text = group.artist, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.body2, maxLines = 1)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = group.title, maxLines = 1)
+                            Text(
+                                text = "${group.artist} - ${group.songs.firstOrNull()?.platform ?: ""}",
+                                style = MaterialTheme.typography.body2,
+                                maxLines = 1
+                            )
+                        }
+
+                        val songToDownload = group.songs.firstOrNull() // Decide which song to download
+                        if (songToDownload != null) {
+                            val currentDownloadState = downloadState[songToDownload.id]
+                            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                when (currentDownloadState) {
+                                    is SongRepository.DownloadState.Downloading -> {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                    is SongRepository.DownloadState.Downloaded -> {
+                                        Icon(Icons.Default.Check, contentDescription = stringResource(R.string.downloaded))
+                                    }
+                                    else -> {
+                                        Button(
+                                            onClick = { searchViewModel.downloadSong(songToDownload) },
+                                            modifier = Modifier.size(ButtonDefaults.SmallButtonSize)
+                                        ) {
+                                            Icon(Icons.Default.Download, contentDescription = stringResource(R.string.download))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog(
+        showDialog = selectedSong != null,
+        onDismissRequest = { selectedSong = null }
+    ) {
+        val song = selectedSong ?: return@Dialog
+        val currentDownloadState = downloadState[song.id]
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .background(MaterialTheme.colors.background),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = song.title,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.title3,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Text(
+                text = song.artist,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            // Play button
+            Chip(
+                label = { Text(stringResource(R.string.play)) },
+                icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                onClick = {
+                    onSongClick(song)
+                    selectedSong = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ChipDefaults.primaryChipColors()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Download button
+            when (currentDownloadState) {
+                is SongRepository.DownloadState.Downloading -> {
+                    val progress = currentDownloadState.progress
+                    Chip(
+                        label = { Text("${(progress * 100).toInt()}%") },
+                        icon = { Icon(Icons.Default.Download, contentDescription = null) },
+                        onClick = { /* Downloading, disabled */ },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ChipDefaults.secondaryChipColors(),
+                        enabled = false
+                    )
+                }
+                is SongRepository.DownloadState.Downloaded -> {
+                    Chip(
+                        label = { Text(stringResource(R.string.downloaded)) },
+                        icon = { Icon(Icons.Default.Check, contentDescription = null) },
+                        onClick = { /* Already downloaded */ },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ChipDefaults.secondaryChipColors(),
+                        enabled = false
+                    )
+                }
+                else -> {
+                    Chip(
+                        label = { Text(stringResource(R.string.download)) },
+                        icon = { Icon(Icons.Default.Download, contentDescription = null) },
+                        onClick = {
+                            searchViewModel.downloadSong(song)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ChipDefaults.secondaryChipColors()
+                    )
                 }
             }
         }

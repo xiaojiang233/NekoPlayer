@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -39,6 +40,7 @@ import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.model.Playlist
 import top.xiaojiang233.nekoplayer.ui.components.MiniPlayer
+import top.xiaojiang233.nekoplayer.ui.components.LocalMusicSelectionDialog
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 
@@ -58,6 +60,12 @@ fun HomeScreen(
     val viewMode by homeViewModel.viewMode.collectAsState()
     val isPlaying by playerViewModel.isPlaying.collectAsState()
     val nowPlaying by playerViewModel.nowPlaying.collectAsState()
+    val showLocalMusicSelection by homeViewModel.showLocalMusicSelection.collectAsState()
+    val availableLocalSongs by homeViewModel.availableLocalSongs.collectAsState()
+
+    LaunchedEffect(showLocalMusicSelection) {
+        android.util.Log.d("HomeScreen", "showLocalMusicSelection changed: $showLocalMusicSelection, songs: ${availableLocalSongs.size}")
+    }
 
     var showAddMenu by remember { mutableStateOf(false) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
@@ -76,8 +84,18 @@ fun HomeScreen(
     var draggingPlaylistOffset by remember { mutableStateOf(0f) }
     var showPlaylistOptionsDialog by remember { mutableStateOf<Playlist?>(null) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     LaunchedEffect(Unit) {
-        homeViewModel.loadLocalSongs()
+        // Only load songs if not first launch (user has already made a choice about local music)
+        val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        val isFirstLaunch = prefs.getBoolean("is_first_launch", true)
+
+        if (!isFirstLaunch) {
+            // User has already been asked, load their library
+            homeViewModel.loadLocalSongs()
+        }
+        // If it's first launch, wait for permission callback to show selection dialog
     }
 
     if (showCreatePlaylistDialog) {
@@ -163,6 +181,17 @@ fun HomeScreen(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showPlaylistOptionsDialog = null }) { Text(stringResource(R.string.cancel)) }
+            }
+        )
+    }
+
+    // Local music selection dialog
+    if (showLocalMusicSelection) {
+        LocalMusicSelectionDialog(
+            availableSongs = availableLocalSongs,
+            onDismiss = { homeViewModel.setShowLocalMusicSelection(false) },
+            onConfirm = { selectedSongs ->
+                homeViewModel.addLocalSongs(selectedSongs)
             }
         )
     }
@@ -447,8 +476,6 @@ fun HomeScreen(
             ) {
                 Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search))
             }
-
-
         }
     }
 }

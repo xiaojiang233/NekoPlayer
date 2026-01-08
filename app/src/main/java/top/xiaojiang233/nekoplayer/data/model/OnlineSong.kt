@@ -2,6 +2,7 @@ package top.xiaojiang233.nekoplayer.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.io.Serializable as JavaSerializable
 
 @Serializable
 data class OnlineSong(
@@ -13,4 +14,4 @@ data class OnlineSong(
     @SerialName("url") val songUrl: String?,
     @SerialName("pic") val coverUrl: String?,
     @SerialName("lrc") val lyricUrl: String?
-)
+) : JavaSerializable

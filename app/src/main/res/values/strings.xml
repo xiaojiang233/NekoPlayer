@@ -16,6 +16,8 @@
     <string name="song_count">%1$d songs</string>
     <string name="drag_handle">Drag Handle</string>
     <string name="cover_image">Cover Image</string>
+    <string name="cover_image_for">Cover image for %1$s</string>
+
 
     <!-- HomeScreen -->
     <string name="new_playlist">New Playlist</string>
@@ -44,6 +46,8 @@
     <string name="find_favorite_songs">Find your favorite songs</string>
     <string name="download">Download</string>
     <string name="lyrics">Lyrics</string>
+    <string name="downloaded">Downloaded</string>
+    <string name="downloading">Downloading...</string>
 
     <!-- Settings -->
     <string name="title_settings">Settings</string>
@@ -57,6 +61,8 @@
     <string name="title_player">Player</string>
     <string name="show_platform_tag">Show Platform Tag</string>
     <string name="show_platform_tag_desc">Show platform tag under artist name in player</string>
+    <string name="playback_delay">Playback Delay: %1$d ms</string>
+    <string name="fade_in_duration">Fade-in Duration: %1$d ms</string>
     <string name="title_backup_restore">Backup &amp; Restore</string>
     <string name="export_config">Export Configuration</string>
     <string name="export_config_desc">Save settings, songs, and playlists</string>
@@ -74,20 +80,30 @@
     <string name="download_failed_msg">Download failed: %1$s</string>
     <string name="no_history">No history</string>
     <string name="title_search">Search</string>
+    <string name="add_local_music">Add Local Music</string>
+    <string name="select_songs_to_add">Select songs to add to your library</string>
+    <string name="found_songs">Found %1$d songs</string>
+    <string name="no_local_music_found">No local music found</string>
+    <string name="select_none">Select None</string>
 
     <!-- Lyrics Search -->
     <string name="no_lyrics">No Lyrics</string>
     <string name="search_lyrics">Search Lyrics</string>
     <string name="match_lyrics_cover">Match Lyrics &amp; Cover</string>
     <string name="song_title_artist">Song Title / Artist</string>
+    <string name="import_local_lrc">Import Local LRC File</string>
 
     <!-- Wearable -->
     <string name="now_playing">Now Playing</string>
     <string name="library">Library</string>
     <string name="locally_imported">Locally Imported</string>
-
+    <string name="select_local_music">Select Local Music</string>
+    <string name="add_selected">Add (%1$d)</string>
+    <string name="select_all">Select All</string>
+    <string name="deselect_all">Deselect All</string>
+    <string name="clear">Clear</string>
     <string name="playback_mode">Play Mode</string>
-    <string name="previous">上一首</string>
+    <string name="previous">Previous</string>
     <string name="play">Play</string>
     <string name="pause">Pause</string>
     <string name="next">Next</string>
@@ -99,4 +115,5 @@
     <string name="version">Version: %1$s</string>
     <string name="author">Author: xiaojiang233</string>
     <string name="github">Github</string>
+
 </resources>

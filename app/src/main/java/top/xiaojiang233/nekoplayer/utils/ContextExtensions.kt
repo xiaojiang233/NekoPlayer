@@ -1,4 +1,4 @@
-package top.xiaojiang233.nekoplayer.util
+package top.xiaojiang233.nekoplayer.utils
 
 import android.app.Activity
 import android.content.Context
