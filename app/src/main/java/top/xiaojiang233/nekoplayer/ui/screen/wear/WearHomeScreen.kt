@@ -162,7 +162,7 @@ fun WearHomeScreen(
             item {
                 Chip(
                     label = { Text(stringResource(R.string.import_songs)) },
-                    onClick = onAddMusicClick,
+                    onClick = { homeViewModel.showLocalMusicSelection() },
                     icon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = stringResource(R.string.import_songs)) },
                     modifier = Modifier.fillMaxWidth()
                 )

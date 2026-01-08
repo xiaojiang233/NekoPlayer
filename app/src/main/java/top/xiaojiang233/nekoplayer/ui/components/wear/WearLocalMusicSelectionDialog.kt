@@ -1,11 +1,15 @@
 package top.xiaojiang233.nekoplayer.ui.components.wear
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.*
@@ -68,6 +72,16 @@ fun WearLocalMusicSelectionDialog(
                         } else {
                             selectedSongs - song.id
                         }
+                    },
+                    appIcon = {
+                        AsyncImage(
+                            model = song.coverUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
                     },
                     toggleControl = {
                         Checkbox(

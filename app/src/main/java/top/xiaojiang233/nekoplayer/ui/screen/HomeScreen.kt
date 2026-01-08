@@ -227,7 +227,7 @@ fun HomeScreen(
                                     text = { Text(stringResource(R.string.import_songs)) },
                                     onClick = {
                                         showAddMenu = false
-                                        onAddMusicClick()
+                                        homeViewModel.showLocalMusicSelection()
                                     },
                                     leadingIcon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
                                 )

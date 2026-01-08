@@ -144,7 +144,9 @@ class HomeViewModel : ViewModel() {
 
     fun showLocalMusicSelection() {
         viewModelScope.launch {
-            _availableLocalSongs.value = songRepository.getAllMediaStoreMusic()
+            val allSongs = songRepository.getAllMediaStoreMusic()
+            val currentVisibleIds = _localSongs.value.map { it.id }.toSet()
+            _availableLocalSongs.value = allSongs.filter { it.id !in currentVisibleIds }
             _showLocalMusicSelection.value = true
         }
     }
@@ -196,15 +198,20 @@ class HomeViewModel : ViewModel() {
         viewModelScope.launch {
             // Get all MediaStore songs
             val allSongs = songRepository.getAllMediaStoreMusic()
+            val allSongIds = allSongs.map { it.id }.toSet()
 
-            // Songs NOT selected should be hidden
-            val unselectedSongIds = allSongs
-                .filter { it !in selectedSongs }
-                .map { it.id }
-                .toSet()
+            // Calculate new hidden set:
+            // We want (CurrentVisible) U (Selected) to be VISIBLE.
+            // So HIDDEN = ALL - (CurrentVisible U Selected)
+
+            val currentVisibleIds = _localSongs.value.map { it.id }.toSet()
+            val selectedIds = selectedSongs.map { it.id }.toSet()
+            val targetVisibleIds = currentVisibleIds + selectedIds
+
+            val targetHiddenIds = allSongIds - targetVisibleIds
 
             // Update hidden songs list
-            songRepository.setHiddenSongs(unselectedSongIds)
+            songRepository.setHiddenSongs(targetHiddenIds)
 
             // Now load local songs (which will filter out hidden ones)
             loadLocalSongs()

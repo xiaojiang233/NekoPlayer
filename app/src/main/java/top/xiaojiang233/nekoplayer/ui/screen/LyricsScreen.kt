@@ -237,9 +237,9 @@ fun LyricsScreen(
         } else {
             // Portrait mode: increase padding when translation exists to keep focus higher
             if (currentHasTranslation) {
-                containerHeight * 0.30f
-            } else {
                 containerHeight * 0.35f
+            } else {
+                containerHeight * 0.40f
             }
         }
 
