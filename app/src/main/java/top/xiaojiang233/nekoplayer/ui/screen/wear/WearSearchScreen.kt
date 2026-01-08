@@ -1,6 +1,7 @@
 package top.xiaojiang233.nekoplayer.ui.screen.wear
 
 import android.app.RemoteInput
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -53,6 +54,7 @@ import androidx.wear.compose.material.dialog.Dialog
 import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.repository.SongRepository
+import top.xiaojiang233.nekoplayer.service.DownloadService
 import top.xiaojiang233.nekoplayer.utils.launchTextInput
 import top.xiaojiang233.nekoplayer.viewmodel.SearchViewModel
 
@@ -152,29 +154,6 @@ fun WearSearchScreen(
                                 maxLines = 1
                             )
                         }
-
-                        val songToDownload = group.songs.firstOrNull() // Decide which song to download
-                        if (songToDownload != null) {
-                            val currentDownloadState = downloadState[songToDownload.id]
-                            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                when (currentDownloadState) {
-                                    is SongRepository.DownloadState.Downloading -> {
-                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                    }
-                                    is SongRepository.DownloadState.Downloaded -> {
-                                        Icon(Icons.Default.Check, contentDescription = stringResource(R.string.downloaded))
-                                    }
-                                    else -> {
-                                        Button(
-                                            onClick = { searchViewModel.downloadSong(songToDownload) },
-                                            modifier = Modifier.size(ButtonDefaults.SmallButtonSize)
-                                        ) {
-                                            Icon(Icons.Default.Download, contentDescription = stringResource(R.string.download))
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -230,40 +209,46 @@ fun WearSearchScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Download button
-            when (currentDownloadState) {
-                is SongRepository.DownloadState.Downloading -> {
-                    val progress = currentDownloadState.progress
-                    Chip(
-                        label = { Text("${(progress * 100).toInt()}%") },
-                        icon = { Icon(Icons.Default.Download, contentDescription = null) },
-                        onClick = { /* Downloading, disabled */ },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ChipDefaults.secondaryChipColors(),
-                        enabled = false
+            val isDownloaded = currentDownloadState == SongRepository.DownloadState.Downloaded
+            val isDownloading = currentDownloadState is SongRepository.DownloadState.Downloading
+
+            Chip(
+                label = {
+                    Text(
+                        when {
+                            isDownloaded -> stringResource(R.string.downloaded)
+                            isDownloading -> stringResource(R.string.downloading)
+                            else -> stringResource(R.string.download)
+                        }
                     )
-                }
-                is SongRepository.DownloadState.Downloaded -> {
-                    Chip(
-                        label = { Text(stringResource(R.string.downloaded)) },
-                        icon = { Icon(Icons.Default.Check, contentDescription = null) },
-                        onClick = { /* Already downloaded */ },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ChipDefaults.secondaryChipColors(),
-                        enabled = false
-                    )
-                }
-                else -> {
-                    Chip(
-                        label = { Text(stringResource(R.string.download)) },
-                        icon = { Icon(Icons.Default.Download, contentDescription = null) },
-                        onClick = {
-                            searchViewModel.downloadSong(song)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ChipDefaults.secondaryChipColors()
-                    )
-                }
-            }
+                },
+                icon = {
+                    if (isDownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            indicatorColor = MaterialTheme.colors.onPrimary
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isDownloaded) Icons.Default.Check else Icons.Default.Download,
+                            contentDescription = null
+                        )
+                    }
+                },
+                onClick = {
+                    if (!isDownloaded && !isDownloading) {
+                        val intent = Intent(context, DownloadService::class.java).apply {
+                            putExtra(DownloadService.EXTRA_SONG, song)
+                        }
+                        context.startService(intent)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ChipDefaults.primaryChipColors(),
+                enabled = !isDownloading && !isDownloaded
+            )
+
         }
     }
 }

@@ -228,18 +228,18 @@ fun LyricsScreen(
         val verticalPadding = if (isWearable) {
             containerHeight * 0.35f
         } else if (isLandscape) {
-            // Landscape mode: also adjust padding when translation exists
+            // Landscape mode: increase padding to push focus higher if it's too low
             if (currentHasTranslation) {
                 containerHeight * 0.30f
             } else {
-                containerHeight * 0.40f
+                containerHeight * 0.35f
             }
         } else {
             // Portrait mode: increase padding when translation exists to keep focus higher
             if (currentHasTranslation) {
-                containerHeight * 0.35f
+                containerHeight * 0.30f
             } else {
-                containerHeight * 0.40f
+                containerHeight * 0.35f
             }
         }
 
@@ -399,16 +399,17 @@ fun LyricsScreen(
                                 val spacing = if (isWearable) 12.dp else 16.dp
 
                                 for (i in 0 until 3) {
-                                    // Make dots disappear faster and earlier for smoother transition
-                                    // Dot 2 (rightmost) disappears at 25% progress
-                                    // Dot 1 (middle) disappears at 50% progress
-                                    // Dot 0 (leftmost) disappears at 75% progress
-                                    val disappearThreshold = (3 - i) * 0.25f
+                                    // Dots now disappear sequentially and later.
+                                    val disappearThreshold = when(i) {
+                                        2 -> 0.33f // Third dot (right-most)
+                                        1 -> 0.66f // Middle dot
+                                        else -> 0.90f // First dot (left-most)
+                                    }
                                     val isVisible = progress < disappearThreshold
 
                                     val fadeAlpha by animateFloatAsState(
                                         targetValue = if (isVisible) 1f else 0f,
-                                        animationSpec = tween(durationMillis = 150, easing = LinearEasing),
+                                        animationSpec = tween(durationMillis = 200, easing = LinearEasing),
                                         label = "fadeAlpha$i"
                                     )
 
@@ -419,7 +420,9 @@ fun LyricsScreen(
                                                 .size(dotSize)
                                                 .background(Color.White.copy(alpha = currentDotAlpha), CircleShape)
                                         )
-                                        Spacer(modifier = Modifier.width(spacing))
+                                        if (i < 2) { // Add spacer for all but the last dot
+                                            Spacer(modifier = Modifier.width(spacing))
+                                        }
                                     }
                                 }
                             }

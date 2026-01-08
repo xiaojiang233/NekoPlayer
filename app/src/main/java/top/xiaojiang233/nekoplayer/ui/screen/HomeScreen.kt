@@ -189,7 +189,7 @@ fun HomeScreen(
     if (showLocalMusicSelection) {
         LocalMusicSelectionDialog(
             availableSongs = availableLocalSongs,
-            onDismiss = { homeViewModel.setShowLocalMusicSelection(false) },
+            onDismiss = { homeViewModel.hideLocalMusicSelection() },
             onConfirm = { selectedSongs ->
                 homeViewModel.addLocalSongs(selectedSongs)
             }
@@ -507,7 +507,18 @@ fun SongItem(
         ) {
             ListItem(
                 headlineContent = { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                supportingContent = { Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                supportingContent = {
+                    Column {
+                        Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (isSelectionMode && song.platform == "local") {
+                            Text(
+                                text = stringResource(R.string.locally_imported),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+                },
                 leadingContent = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (isSelectionMode) {

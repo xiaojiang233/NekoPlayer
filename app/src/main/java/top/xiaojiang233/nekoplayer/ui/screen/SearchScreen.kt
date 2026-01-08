@@ -1,5 +1,6 @@
 package top.xiaojiang233.nekoplayer.ui.screen
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -57,9 +59,9 @@ import coil.compose.AsyncImage
 import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.repository.SongRepository
+import top.xiaojiang233.nekoplayer.service.DownloadService
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.SearchViewModel
-import top.xiaojiang233.nekoplayer.viewmodel.SongGroup
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +81,7 @@ fun SearchScreen(
     val isPlaying by playerViewModel.isPlaying.collectAsState()
     val nowPlaying by playerViewModel.nowPlaying.collectAsState()
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
     LaunchedEffect(listState, isLoading, groupedSearchResults.size) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
@@ -91,8 +94,7 @@ fun SearchScreen(
 
     Scaffold(
         topBar = {
-            Column(modifier = Modifier.statusBarsPadding()) {
-                // Custom Search Bar
+            Column(modifier = Modifier.statusBarsPadding().padding(top = 16.dp)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -263,7 +265,12 @@ fun SearchScreen(
                                         val state = downloadState[song.id] ?: SongRepository.DownloadState.None
                                         when (state) {
                                             is SongRepository.DownloadState.None -> {
-                                                IconButton(onClick = { searchViewModel.downloadSong(song) }) {
+                                                IconButton(onClick = {
+                                                    val intent = Intent(context, DownloadService::class.java).apply {
+                                                        putExtra(DownloadService.EXTRA_SONG, song)
+                                                    }
+                                                    context.startService(intent)
+                                                }) {
                                                     Icon(Icons.Default.Download, contentDescription = stringResource(R.string.download))
                                                 }
                                             }

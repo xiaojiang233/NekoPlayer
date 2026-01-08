@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -25,6 +26,7 @@ import androidx.wear.compose.material.ToggleChip
 import androidx.wear.compose.material.Vignette
 import androidx.wear.compose.material.VignettePosition
 import top.xiaojiang233.nekoplayer.R
+import top.xiaojiang233.nekoplayer.utils.OtherUtils
 import top.xiaojiang233.nekoplayer.viewmodel.SettingsViewModel
 
 @Composable
@@ -37,8 +39,9 @@ fun WearSettingsScreen(
     val lyricsBlurIntensity by settingsViewModel.lyricsBlurIntensity.collectAsState()
     val playbackDelay by settingsViewModel.playbackDelay.collectAsState()
     val fadeInDuration by settingsViewModel.fadeInDuration.collectAsState()
+    val watchScale by settingsViewModel.watchScale.collectAsState()
     val listState = rememberScalingLazyListState()
-
+    val context = LocalContext.current
     Scaffold(
         timeText = { TimeText() },
         vignette = { Vignette(vignettePosition = VignettePosition.TopAndBottom) },
@@ -59,6 +62,29 @@ fun WearSettingsScreen(
                 ListHeader {
                     Text(text = stringResource(R.string.title_player))
                 }
+            }
+
+            item {
+                Chip(
+                    label = { Text(stringResource(R.string.watch_scale, String.format("%.1f", watchScale))) },
+                    onClick = {
+                        val min = 0.5f
+                        val max = 2.0f
+                        val step = 0.25f
+
+                        val newScale = if (watchScale + step <= max) {
+                            watchScale + step
+                        } else {
+                            min
+                        }
+
+                        settingsViewModel.setWatchScale(newScale)
+
+
+            },
+                    modifier = Modifier.fillMaxWidth(),
+                    secondaryLabel = { Text(stringResource(R.string.watch_scale_desc)) }
+                )
             }
 
             item {
@@ -154,7 +180,7 @@ fun WearSettingsScreen(
                 Chip(
                     label = { Text(stringResource(R.string.app_name)) },
                     onClick = { /* No action */ },
-                    secondaryLabel = { Text(stringResource(R.string.version, "1.1")) },
+                    secondaryLabel = { Text(stringResource(R.string.version, OtherUtils.getAppVersionName(context))) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }

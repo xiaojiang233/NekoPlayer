@@ -12,6 +12,7 @@ import top.xiaojiang233.nekoplayer.data.repository.PlaylistRepository
 import top.xiaojiang233.nekoplayer.data.repository.SongRepository
 import top.xiaojiang233.nekoplayer.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
@@ -26,6 +27,9 @@ class HomeViewModel : ViewModel() {
 
     private val _showLocalMusicSelection = MutableStateFlow(false)
     val showLocalMusicSelection: StateFlow<Boolean> = _showLocalMusicSelection
+
+    private val _showWatchScaleSelection = MutableStateFlow(false)
+    val showWatchScaleSelection: StateFlow<Boolean> = _showWatchScaleSelection
 
     private val _availableLocalSongs = MutableStateFlow<List<OnlineSong>>(emptyList())
     val availableLocalSongs: StateFlow<List<OnlineSong>> = _availableLocalSongs
@@ -42,14 +46,14 @@ class HomeViewModel : ViewModel() {
 
     init {
 
-        // Monitor download state changes and refresh when downloads complete
+        // Monitor download state changes and refresh based on count of downloaded items logic to avoid spam
         viewModelScope.launch {
-            songRepository.downloadState.collect { stateMap ->
-                // If any song just finished downloading, refresh the list
-                if (stateMap.values.any { it is SongRepository.DownloadState.Downloaded }) {
+            songRepository.downloadState
+                .map { it.values.count { state -> state is SongRepository.DownloadState.Downloaded } }
+                .distinctUntilChanged()
+                .collect {
                     loadLocalSongs()
                 }
-            }
         }
     }
 
@@ -139,20 +143,36 @@ class HomeViewModel : ViewModel() {
     }
 
     fun showLocalMusicSelection() {
-        android.util.Log.d("HomeViewModel", "showLocalMusicSelection called")
         viewModelScope.launch {
-            // Get all available local music from MediaStore
-            val songs = songRepository.getAllMediaStoreMusic()
-            android.util.Log.d("HomeViewModel", "Found ${songs.size} songs from MediaStore")
-            _availableLocalSongs.value = songs
+            _availableLocalSongs.value = songRepository.getAllMediaStoreMusic()
             _showLocalMusicSelection.value = true
-            android.util.Log.d("HomeViewModel", "Dialog should show now: ${_showLocalMusicSelection.value}")
         }
     }
 
-    fun setShowLocalMusicSelection(show: Boolean) {
-        if (!show && _showLocalMusicSelection.value) {
-            // User is dismissing the dialog
+    fun showWatchScaleSelection() {
+        _showWatchScaleSelection.value = true
+    }
+
+    fun hideWatchScaleSelection() {
+        _showWatchScaleSelection.value = false
+    }
+
+    fun setWatchScale(scale: Float) {
+        // Must save synchronously because the app might restart immediately after this call
+        val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
+        context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putFloat("watch_scale", scale)
+            .putBoolean("is_scale_set", true)
+            .commit()
+
+        viewModelScope.launch {
+            settingsRepository.setWatchScale(scale)
+        }
+    }
+
+    fun hideLocalMusicSelection() {
+        if (_showLocalMusicSelection.value) {
             viewModelScope.launch {
                 // Check if it's first launch
                 val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
@@ -169,7 +189,7 @@ class HomeViewModel : ViewModel() {
                 }
             }
         }
-        _showLocalMusicSelection.value = show
+        _showLocalMusicSelection.value = false
     }
 
     fun addLocalSongs(selectedSongs: List<OnlineSong>) {

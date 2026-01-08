@@ -1,5 +1,6 @@
 package top.xiaojiang233.nekoplayer.ui.screen
 
+import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -45,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -54,6 +56,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import top.xiaojiang233.nekoplayer.R
+import top.xiaojiang233.nekoplayer.utils.OtherUtils
 import top.xiaojiang233.nekoplayer.utils.findActivity
 import top.xiaojiang233.nekoplayer.viewmodel.SettingsViewModel
 
@@ -71,7 +74,7 @@ fun SettingsScreen(
     val fadeInDuration by viewModel.fadeInDuration.collectAsState()
 
     val uriHandler = LocalUriHandler.current
-
+    val context = LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -289,7 +292,8 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(text = stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
-                    Text(text = stringResource(R.string.version, "1.1"), style = MaterialTheme.typography.bodyMedium) // Using 1.1 based on errors build.gradle.kts
+
+                    Text(text = stringResource(R.string.version, OtherUtils.getAppVersionName(context)), style = MaterialTheme.typography.bodyMedium) // Using 1.1 based on errors build.gradle.kts
                     Text(text = stringResource(R.string.author), style = MaterialTheme.typography.bodyMedium)
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
@@ -305,3 +309,5 @@ fun SettingsScreen(
         }
     }
 }
+
+

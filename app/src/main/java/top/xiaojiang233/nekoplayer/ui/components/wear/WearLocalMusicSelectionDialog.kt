@@ -14,15 +14,17 @@ import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 
 @Composable
 fun WearLocalMusicSelectionDialog(
+    showDialog: Boolean,
+    onDismissRequest: () -> Unit,
     availableSongs: List<OnlineSong>,
-    onDismiss: () -> Unit,
-    onConfirm: (List<OnlineSong>) -> Unit
+    onSongsSelected: (List<OnlineSong>) -> Unit
 ) {
+    if (!showDialog) return
     var selectedSongs by remember { mutableStateOf(setOf<String>()) }
 
     androidx.wear.compose.material.dialog.Dialog(
         showDialog = true,
-        onDismissRequest = onDismiss
+        onDismissRequest = onDismissRequest
     ) {
         ScalingLazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -81,7 +83,7 @@ fun WearLocalMusicSelectionDialog(
                     label = { Text(stringResource(R.string.add_selected, selectedSongs.size)) },
                     onClick = {
                         val selected = availableSongs.filter { selectedSongs.contains(it.id) }
-                        onConfirm(selected)
+                        onSongsSelected(selected)
                     },
                     enabled = selectedSongs.isNotEmpty(),
                     colors = ChipDefaults.primaryChipColors(),
@@ -92,7 +94,7 @@ fun WearLocalMusicSelectionDialog(
             item {
                 Chip(
                     label = { Text(stringResource(R.string.cancel)) },
-                    onClick = onDismiss,
+                    onClick = onDismissRequest,
                     colors = ChipDefaults.secondaryChipColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -100,4 +102,3 @@ fun WearLocalMusicSelectionDialog(
         }
     }
 }
-

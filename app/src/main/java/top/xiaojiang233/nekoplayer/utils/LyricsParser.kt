@@ -12,17 +12,28 @@ data class LyricLine(
 )
 
 object LyricsParser {
-    private val TIME_TAG_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})\\]")
+    private val TIME_TAG_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2})[\\.:](\\d{2,3})\\]")
+    private val HTML_TAG_PATTERN = Pattern.compile("<[^>]*>")
 
-    fun parse(lrcContent: String): List<LyricLine> {
+    fun parse(lrcContent: String?): List<LyricLine> {
+        if (lrcContent.isNullOrBlank()) return emptyList()
+
         val tempLyrics = mutableListOf<Pair<Long, String>>()
         val reader = BufferedReader(StringReader(lrcContent))
         var line: String? = reader.readLine()
 
         while (line != null) {
+            // Strip HTML tags first
+            val cleanLine = HTML_TAG_PATTERN.matcher(line).replaceAll("").trim()
+
+            if (cleanLine.isBlank()) {
+                line = reader.readLine()
+                continue
+            }
+
             // Find all timestamps in this line
             val timestamps = mutableListOf<Long>()
-            val matcher = TIME_TAG_PATTERN.matcher(line)
+            val matcher = TIME_TAG_PATTERN.matcher(cleanLine)
             var lastEnd = 0
 
             while (matcher.find()) {
@@ -37,10 +48,11 @@ object LyricsParser {
             }
 
             // Get the text after all timestamps
-            if (timestamps.isNotEmpty() && lastEnd < line.length) {
-                val text = line.substring(lastEnd).trim()
+            if (timestamps.isNotEmpty()) {
+                val text = if (lastEnd < cleanLine.length) cleanLine.substring(lastEnd).trim() else ""
+                // Even if text is empty, we might want to show it (as a pause/interlude)
+                // But usually we only care about content
                 if (text.isNotEmpty()) {
-                    // Add the same text for each timestamp
                     timestamps.forEach { time ->
                         tempLyrics.add(Pair(time, text))
                     }
@@ -54,26 +66,26 @@ object LyricsParser {
         val mergedLyrics = mutableListOf<LyricLine>()
         val groupedByTime = tempLyrics.groupBy { it.first }
 
-        groupedByTime.forEach { (time, lines) ->
-            when (lines.size) {
+        groupedByTime.keys.sorted().forEach { time ->
+            val lines = groupedByTime[time]!!
+            // Filter out exact duplicate text for the same timestamp
+            val uniqueLines = lines.map { it.second }.distinct()
+
+            when (uniqueLines.size) {
                 1 -> {
-                    // Single line - no translation
-                    mergedLyrics.add(LyricLine(time, lines[0].second, null))
-                }
-                2 -> {
-                    // Two lines with same time - treat second as translation
-                    mergedLyrics.add(LyricLine(time, lines[0].second, lines[1].second))
+                    // Single unique line - no translation
+                    mergedLyrics.add(LyricLine(time, uniqueLines[0], null))
                 }
                 else -> {
-                    // More than 2 lines - use first as main, join rest as translation
-                    val main = lines[0].second
-                    val trans = lines.drop(1).joinToString("\n") { it.second }
+                    // Multiple unique lines - treat first as main, joined rest as translation
+                    val main = uniqueLines[0]
+                    val trans = uniqueLines.drop(1).joinToString("\n")
                     mergedLyrics.add(LyricLine(time, main, trans))
                 }
             }
         }
 
-        return mergedLyrics.sortedBy { it.time }
+        return mergedLyrics
     }
 
     fun parseFile(file: File): List<LyricLine> {
@@ -81,4 +93,3 @@ object LyricsParser {
         return parse(file.readText())
     }
 }
-

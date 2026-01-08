@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -72,9 +73,22 @@ class MainActivity : ComponentActivity() {
     private fun checkFirstLaunch() {
         val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
         val isFirstLaunch = prefs.getBoolean("is_first_launch", true)
+        val isScaleSet = prefs.getBoolean("is_scale_set", false)
+
+        val isSystemWatch = packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH)
+        val metrics = resources.displayMetrics
+        val isWatchByResolution = metrics.widthPixels < 800 && metrics.heightPixels < 800
+        val isWearable = isSystemWatch || isWatchByResolution
+
         if (isFirstLaunch) {
-            homeViewModel.showLocalMusicSelection()
+            if (isWearable && !isScaleSet) {
+                homeViewModel.showWatchScaleSelection()
+            } else {
+                homeViewModel.showLocalMusicSelection()
+            }
         } else {
+            // Check if we need to apply scale again or if it was missed?
+            // Actually, if !isFirstLaunch, we don't care about scale setting interruption anymore.
             homeViewModel.loadLocalSongs()
         }
     }
@@ -90,9 +104,12 @@ class MainActivity : ComponentActivity() {
         val isWearable = isSystemWatch || isWatchByResolution
 
         if (isWearable) {
-            if (!resources.configuration.isScreenRound && !dpiAdjusted) {
+            val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            val watchScale = prefs.getFloat("watch_scale", 1.0f)
+
+            if (!dpiAdjusted && watchScale != 1.0f) {
                 val config = resources.configuration
-                config.densityDpi = (config.densityDpi * 1.6f).toInt()
+                config.densityDpi = (config.densityDpi * watchScale).toInt()
                 resources.updateConfiguration(config, resources.displayMetrics)
                 dpiAdjusted = true
             }
@@ -130,7 +147,11 @@ class MainActivity : ComponentActivity() {
                     val permissionsNotGranted = permissionsToRequest.filter {
                         ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
                     }
-                    permissionRequestLauncher.launch(permissionsNotGranted.toTypedArray())
+                    if (permissionsNotGranted.isNotEmpty()) {
+                        permissionRequestLauncher.launch(permissionsNotGranted.toTypedArray())
+                    } else {
+                        checkFirstLaunch()
+                    }
                 }
             }
 
@@ -161,7 +182,13 @@ class MainActivity : ComponentActivity() {
                             val nowPlaying by playerViewModel.nowPlaying.collectAsState()
                             val customCover by playerViewModel.customCover.collectAsState()
 
-                            if (nowPlaying != null && currentRoute != Routes.PLAYER) {
+                            AnimatedVisibility(
+                                visible = nowPlaying != null && currentRoute != Routes.PLAYER,
+                                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                                modifier = Modifier
+                                    .align(if (LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) Alignment.BottomEnd else Alignment.BottomCenter)
+                            ) {
                                 val configuration = LocalConfiguration.current
                                 val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
                                 MiniPlayer(
@@ -169,7 +196,6 @@ class MainActivity : ComponentActivity() {
                                     nowPlaying = nowPlaying,
                                     onPlayPauseClick = { playerViewModel.onPlayPauseClick() },
                                     modifier = Modifier
-                                        .align(if (isLandscape) Alignment.BottomEnd else Alignment.BottomCenter)
                                         .padding(if (isLandscape) androidx.compose.ui.unit.Dp(16f) else androidx.compose.ui.unit.Dp(10f)),
                                     customCover = customCover,
                                     onMiniPlayerClick = { navController.navigate(Routes.PLAYER) }

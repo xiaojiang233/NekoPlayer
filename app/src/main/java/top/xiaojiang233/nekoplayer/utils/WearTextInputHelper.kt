@@ -17,16 +17,17 @@ fun launchTextInput(
     initialValue: String? = null,
     onResult: (String) -> Unit
 ) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+    // WearOS 2.0+ generally supports remote input intent
+    // Using a more inclusive check or just trying the intent
+    try {
         val intent = RemoteInputIntentHelper.createActionRemoteInputIntent()
-        val remoteInputs = listOf(
-            RemoteInput.Builder(remoteInputKey)
-                .setLabel(label)
-                .build()
-        )
-        RemoteInputIntentHelper.putRemoteInputsExtra(intent, remoteInputs)
+        val remoteInput = RemoteInput.Builder(remoteInputKey)
+            .setLabel(label)
+            .build()
+        RemoteInputIntentHelper.putRemoteInputsExtra(intent, listOf(remoteInput))
         launcher.launch(intent)
-    } else {
+    } catch (e: Exception) {
+        // Fallback to AlertDialog if intent is not supported
         val editText = EditText(context).apply {
             if (initialValue != null) {
                 setText(initialValue)

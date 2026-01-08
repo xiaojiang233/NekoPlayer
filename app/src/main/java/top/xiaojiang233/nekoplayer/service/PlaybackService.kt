@@ -9,11 +9,13 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
+@UnstableApi
 class PlaybackService : MediaLibraryService() {
 
     private var mediaLibrarySession: MediaLibrarySession? = null
@@ -60,7 +62,9 @@ class PlaybackService : MediaLibraryService() {
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
 
-        mediaLibrarySession = MediaLibrarySession.Builder(this, player, librarySessionCallback).build()
+        mediaLibrarySession = MediaLibrarySession.Builder(this, player, librarySessionCallback)
+            .setBitmapLoader(CustomBitmapLoader(this))
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {

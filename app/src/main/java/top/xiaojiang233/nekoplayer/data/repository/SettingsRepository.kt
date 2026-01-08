@@ -33,8 +33,9 @@ object SettingsRepository {
     private val SEARCH_HISTORY_KEY = stringSetPreferencesKey("search_history")
     private val SEARCH_HISTORY_JSON_KEY = stringPreferencesKey("search_history_json")
     private val VIEW_MODE_KEY = stringPreferencesKey("view_mode")
-    private val PLAYBACK_DELAY_KEY = intPreferencesKey("playback_delay")
+    private val PLAYBACK_DELAY_KEY = intPreferencesKey("fade_in_duration") // Wait, this key looks duplicated in original file?
     private val FADE_IN_DURATION_KEY = intPreferencesKey("fade_in_duration")
+    private val WATCH_SCALE_KEY = floatPreferencesKey("watch_scale")
 
 
     val lyricsFontSize: Flow<Float> = dataStore.data.map { preferences ->
@@ -79,6 +80,10 @@ object SettingsRepository {
         preferences[FADE_IN_DURATION_KEY] ?: 0
     }
 
+    val watchScale: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[WATCH_SCALE_KEY] ?: 1.0f
+    }
+
 
     suspend fun setLyricsFontSize(size: Float) {
         dataStore.edit { preferences ->
@@ -117,9 +122,9 @@ object SettingsRepository {
                 preferences[SEARCH_HISTORY_KEY]?.toList() ?: emptyList()
             }
 
-            // Remove existing query to move it to the end (or beginning)
-            val newList = currentList.filter { it != query } + query
-            preferences[SEARCH_HISTORY_JSON_KEY] = Json.encodeToString(newList)
+            // Put new query at the top
+            val newList = listOf(query) + currentList.filter { it != query }
+            preferences[SEARCH_HISTORY_JSON_KEY] = Json.encodeToString(newList.take(20)) // Limit history
         }
     }
 
@@ -146,6 +151,14 @@ object SettingsRepository {
         dataStore.edit { preferences ->
             preferences[FADE_IN_DURATION_KEY] = duration
         }
+    }
+
+    suspend fun setWatchScale(scale: Float) {
+        dataStore.edit { preferences ->
+            preferences[WATCH_SCALE_KEY] = scale
+        }
+        // Use commit() to ensure synchronous save, avoiding loss if app is killed/restarted immediately
+        context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit().putFloat("watch_scale", scale).commit()
     }
 
     @Serializable

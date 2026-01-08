@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Card
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -66,6 +67,7 @@ import top.xiaojiang233.nekoplayer.R
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
 import top.xiaojiang233.nekoplayer.data.model.Playlist
 import top.xiaojiang233.nekoplayer.ui.components.wear.WearLocalMusicSelectionDialog
+import top.xiaojiang233.nekoplayer.ui.components.wear.WearWatchScaleSelectionDialog
 import top.xiaojiang233.nekoplayer.utils.launchTextInput
 import top.xiaojiang233.nekoplayer.viewmodel.HomeViewModel
 import top.xiaojiang233.nekoplayer.viewmodel.PlayerViewModel
@@ -85,6 +87,7 @@ fun WearHomeScreen(
     val playlists by homeViewModel.playlists.collectAsState()
     val nowPlaying by playerViewModel.nowPlaying.collectAsState()
     val showLocalMusicSelection by homeViewModel.showLocalMusicSelection.collectAsState()
+    val showWatchScaleSelection by homeViewModel.showWatchScaleSelection.collectAsState()
     val availableLocalSongs by homeViewModel.availableLocalSongs.collectAsState()
 
     var selectedSong by remember { mutableStateOf<OnlineSong?>(null) }
@@ -101,6 +104,8 @@ fun WearHomeScreen(
             }
         }
     }
+    val playlists_str1 = stringResource(R.string.new_playlist)
+    val playlists_str2 = stringResource(R.string.rename_playlist)
 
     val renameVoiceLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -185,7 +190,7 @@ fun WearHomeScreen(
                                 context = context,
                                 launcher = voiceInputLauncher,
                                 remoteInputKey = "text_input",
-                                label = context.getString(R.string.new_playlist)
+                                label = playlists_str1
                             ) { newName ->
                                 homeViewModel.createPlaylist(newName)
                             }
@@ -196,7 +201,6 @@ fun WearHomeScreen(
 
             items(playlists) { playlist ->
                 Card(
-                    onClick = { onPlaylistClick(playlist.id) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
@@ -230,13 +234,6 @@ fun WearHomeScreen(
 
             items(localSongs) { song ->
                 Card(
-                    onClick = {
-                        val index = localSongs.indexOf(song)
-                        if (index >= 0) {
-                            playerViewModel.playPlaylist(localSongs, index)
-                            onPlayerClick()
-                        }
-                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
@@ -365,7 +362,7 @@ fun WearHomeScreen(
                             context = context,
                             launcher = renameVoiceLauncher,
                             remoteInputKey = "text_input",
-                            label = context.getString(R.string.rename_playlist),
+                            label = playlists_str2,
                             initialValue = playlist.name
                         ) { newName ->
                             homeViewModel.renamePlaylist(playlist, newName)
@@ -396,13 +393,27 @@ fun WearHomeScreen(
         }
     }
 
-    if (showLocalMusicSelection) {
-        WearLocalMusicSelectionDialog(
-            availableSongs = availableLocalSongs,
-            onDismiss = { homeViewModel.setShowLocalMusicSelection(false) },
-            onConfirm = { selectedSongs ->
-                homeViewModel.addLocalSongs(selectedSongs)
-            }
-        )
-    }
+    WearLocalMusicSelectionDialog(
+        showDialog = showLocalMusicSelection,
+        onDismissRequest = { homeViewModel.hideLocalMusicSelection() },
+        availableSongs = availableLocalSongs,
+        onSongsSelected = { homeViewModel.addLocalSongs(it) }
+    )
+
+    WearWatchScaleSelectionDialog(
+        showDialog = showWatchScaleSelection,
+        onDismissRequest = { homeViewModel.hideWatchScaleSelection() },
+        onScaleSelected = { scale ->
+            homeViewModel.setWatchScale(scale)
+            homeViewModel.hideWatchScaleSelection()
+
+            // Restart application to apply scaling
+            val packageManager = context.packageManager
+            val intent = packageManager.getLaunchIntentForPackage(context.packageName)
+            val componentName = intent?.component
+            val mainIntent = android.content.Intent.makeRestartActivityTask(componentName)
+            context.startActivity(mainIntent)
+            Runtime.getRuntime().exit(0)
+        }
+    )
 }

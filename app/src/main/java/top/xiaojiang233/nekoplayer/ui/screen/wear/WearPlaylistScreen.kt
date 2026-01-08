@@ -149,77 +149,70 @@ fun WearPlaylistScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     CompactChip(
-                        label = { Text(stringResource(R.string.add_songs)) },
-                        icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                        onClick = { showAddSongsDialog = true }
+                        label = { Icon(Icons.Default.Add, contentDescription = null) },
+                        onClick = { showAddSongsDialog = true },
+                        modifier = Modifier.weight(1f),
+                        colors = ChipDefaults.secondaryChipColors()
                     )
                 }
             }
 
-            if (playlistSongs.isEmpty()) {
-                item {
-                    Text(
-                        text = stringResource(R.string.no_songs_available),
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.body2
-                    )
-                }
-            } else {
-                items(playlistSongs) { song ->
-                    Card(
-                        onClick = {
-                            val index = playlistSongs.indexOf(song)
-                            if (index != -1) {
-                                playerViewModel.playPlaylist(playlistSongs, index)
-                                onSongClick()
+            // Song list
+            items(playlistSongs) { song ->
+                Card(
+                    onClick = {
+                        val index = playlistSongs.indexOf(song)
+                        if (index >= 0) {
+                            playerViewModel.playPlaylist(playlistSongs, index)
+                            onSongClick()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .combinedClickable(
+                            onClick = {
+                                val index = playlistSongs.indexOf(song)
+                                if (index >= 0) {
+                                    playerViewModel.playPlaylist(playlistSongs, index)
+                                    onSongClick()
+                                }
+                            },
+                            onLongClick = {
+                                selectedSong = song
                             }
-                        },
+                        )
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .combinedClickable(
-                                onClick = {
-                                    val index = playlistSongs.indexOf(song)
-                                    if (index != -1) {
-                                        playerViewModel.playPlaylist(playlistSongs, index)
-                                        onSongClick()
-                                    }
-                                },
-                                onLongClick = { selectedSong = song }
-                            )
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
+                        AsyncImage(
+                            model = song.coverUrl,
+                            contentDescription = stringResource(R.string.cover_image),
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(
-                                model = song.coverUrl,
-                                contentDescription = stringResource(R.string.cover_image),
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = song.title,
+                                style = MaterialTheme.typography.body1,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = song.title,
-                                    style = MaterialTheme.typography.body1,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = song.artist,
-                                    style = MaterialTheme.typography.body2,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            Text(
+                                text = song.artist,
+                                style = MaterialTheme.typography.body2,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
@@ -227,9 +220,7 @@ fun WearPlaylistScreen(
         }
     }
 
-    // Song options dialog (long press)
-    if (selectedSong != null && playlist != null) {
-        val song = selectedSong!!
+    if (selectedSong != null) {
         Dialog(
             showDialog = true,
             onDismissRequest = { selectedSong = null }
@@ -242,105 +233,95 @@ fun WearPlaylistScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = song.title,
+                    text = selectedSong?.title ?: "",
                     style = MaterialTheme.typography.title3,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    overflow = TextOverflow.Ellipsis
                 )
-
+                Spacer(modifier = Modifier.height(16.dp))
                 Chip(
-                    label = { Text(stringResource(R.string.remove_selected)) },
-                    icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                    label = { Text(stringResource(R.string.delete)) },
                     onClick = {
-                        homeViewModel.removeSongFromPlaylist(playlist, song.id)
+                        if (playlist != null && selectedSong != null) {
+                            homeViewModel.removeSongFromPlaylist(playlist, selectedSong!!.id)
+                        }
                         selectedSong = null
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ChipDefaults.secondaryChipColors()
-                )
-
-                Chip(
-                    label = { Text(stringResource(R.string.cancel)) },
-                    onClick = { selectedSong = null },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    colors = ChipDefaults.primaryChipColors()
+                    colors = ChipDefaults.secondaryChipColors(),
+                    icon = { Icon(Icons.Default.Delete, contentDescription = null) }
                 )
             }
         }
     }
 
-    // Add songs dialog
-    if (showAddSongsDialog && playlist != null) {
-        val availableSongs = remember(localSongs, playlist) {
-            localSongs.filter { it.id !in playlist.songIds }
+    if (showAddSongsDialog) {
+        val availableToAdd = localSongs.filter { song ->
+            playlist?.songIds?.contains(song.id) == false
         }
 
-        if (availableSongs.isEmpty()) {
-            LaunchedEffect(Unit) {
-                showAddSongsDialog = false
-            }
-        } else {
-            Dialog(
-                showDialog = true,
-                onDismissRequest = { showAddSongsDialog = false }
-            ) {
-                var selectedSongIds by remember { mutableStateOf(setOf<String>()) }
+        Dialog(
+            showDialog = true,
+            onDismissRequest = { showAddSongsDialog = false }
+        ) {
+            val selectionListState = rememberScalingLazyListState()
+            var selectedIds by remember { mutableStateOf(setOf<String>()) }
 
+            Column(modifier = Modifier.fillMaxSize()) {
                 ScalingLazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp)
+                    state = selectionListState,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(top = 24.dp, bottom = 8.dp)
                 ) {
                     item {
-                        ListHeader {
-                            Text(stringResource(R.string.add_songs))
+                        ListHeader { Text(stringResource(R.string.add_songs)) }
+                    }
+                    if (availableToAdd.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(R.string.no_songs_available),
+                                modifier = Modifier.padding(16.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        items(availableToAdd) { song ->
+                            ToggleChip(
+                                checked = selectedIds.contains(song.id),
+                                onCheckedChange = { checked ->
+                                    selectedIds = if (checked) {
+                                        selectedIds + song.id
+                                    } else {
+                                        selectedIds - song.id
+                                    }
+                                },
+                                label = { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                toggleControl = {
+                                    Checkbox(
+                                        checked = selectedIds.contains(song.id),
+                                        onCheckedChange = null
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
+                }
 
-                    items(availableSongs) { song ->
-                        ToggleChip(
-                            label = { Text(song.title) },
-                            secondaryLabel = { Text(song.artist) },
-                            checked = selectedSongIds.contains(song.id),
-                            onCheckedChange = { checked ->
-                                selectedSongIds = if (checked) {
-                                    selectedSongIds + song.id
-                                } else {
-                                    selectedSongIds - song.id
-                                }
-                            },
-                            toggleControl = {
-                                Checkbox(
-                                    checked = selectedSongIds.contains(song.id),
-                                    onCheckedChange = null
-                                )
+                if (availableToAdd.isNotEmpty()) {
+                    Chip(
+                        label = { Text(stringResource(R.string.add)) },
+                        onClick = {
+                            val selectedSongs = availableToAdd.filter { it.id in selectedIds }
+                            if (playlist != null) {
+                                homeViewModel.addSongsToPlaylist(playlist, selectedSongs)
                             }
-                        )
-                    }
-
-                    item {
-                        Chip(
-                            label = { Text(stringResource(R.string.add_selected, selectedSongIds.size)) },
-                            onClick = {
-                                val songsToAdd = availableSongs.filter { it.id in selectedSongIds }
-                                homeViewModel.addSongsToPlaylist(playlist, songsToAdd)
-                                showAddSongsDialog = false
-                            },
-                            enabled = selectedSongIds.isNotEmpty(),
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ChipDefaults.primaryChipColors()
-                        )
-                    }
-
-                    item {
-                        Chip(
-                            label = { Text(stringResource(R.string.cancel)) },
-                            onClick = { showAddSongsDialog = false },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ChipDefaults.secondaryChipColors()
-                        )
-                    }
+                            showAddSongsDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                        enabled = selectedIds.isNotEmpty()
+                    )
                 }
             }
         }

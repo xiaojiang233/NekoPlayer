@@ -49,18 +49,11 @@ class SettingsViewModel : ViewModel() {
     val showPlatformTag: StateFlow<Boolean> = settingsRepository.showPlatformTag
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
-    val playbackDelay: StateFlow<Int> = settingsRepository.playbackDelay
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val viewMode: StateFlow<String> = settingsRepository.viewMode.stateIn(viewModelScope, SharingStarted.Lazily, "List")
+    val playbackDelay: StateFlow<Int> = settingsRepository.playbackDelay.stateIn(viewModelScope, SharingStarted.Lazily, 0)
+    val fadeInDuration: StateFlow<Int> = settingsRepository.fadeInDuration.stateIn(viewModelScope, SharingStarted.Lazily, 0)
+    val watchScale: StateFlow<Float> = settingsRepository.watchScale.stateIn(viewModelScope, SharingStarted.Lazily, 1.0f)
 
-    val fadeInDuration: StateFlow<Int> = settingsRepository.fadeInDuration
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-
-    fun clearCache() {
-        viewModelScope.launch {
-            songRepository.clearCache()
-        }
-    }
 
     fun setLyricsFontSize(size: Float) {
         viewModelScope.launch {
@@ -93,8 +86,17 @@ class SettingsViewModel : ViewModel() {
     }
 
     fun setFadeInDuration(duration: Int) {
+        viewModelScope.launch { settingsRepository.setFadeInDuration(duration) }
+    }
+
+    fun setWatchScale(scale: Float) {
+        viewModelScope.launch { settingsRepository.setWatchScale(scale) }
+    }
+
+
+    fun clearCache() {
         viewModelScope.launch {
-            settingsRepository.setFadeInDuration(duration)
+            songRepository.clearCache()
         }
     }
 

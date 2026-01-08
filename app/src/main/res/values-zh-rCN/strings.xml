@@ -92,6 +92,10 @@
     <string name="import_local_lrc">导入本地 LRC 文件</string>
 
     <!-- Wearable -->
+    <string name="watch_scale">缩放比例: %1$s</string>
+    <string name="watch_scale_desc">调整界面整体大小</string>
+    <string name="select_watch_scale">选择缩放比例</string>
+    <string name="apply_and_restart">应用并重启</string>
     <string name="now_playing">正在播放</string>
     <string name="library">音乐库</string>
     <string name="locally_imported">本地导入</string>

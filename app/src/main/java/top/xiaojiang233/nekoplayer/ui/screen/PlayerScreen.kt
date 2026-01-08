@@ -335,10 +335,10 @@ fun CustomProgressBar(
         onDragChange(isDragging)
     }
 
-    // Sync dragProgress with value when not dragging, or initialize when drag starts
-    LaunchedEffect(value) {
+    // Sync dragProgress with value when not dragging
+    LaunchedEffect(value, isDragging) {
         if (!isDragging) {
-            dragProgress = if (maxValue > 0) value / maxValue else 0f
+            dragProgress = if (maxValue > 0) (value / maxValue).coerceIn(0f, 1f) else 0f
         }
     }
 
@@ -350,9 +350,8 @@ fun CustomProgressBar(
                 detectHorizontalDragGestures(
                     onDragStart = { offset ->
                         isDragging = true
-                        val newFraction = (offset.x / size.width).coerceIn(0f, 1f)
-                        dragProgress = newFraction
-                        onValueChange(newFraction * maxValue)
+                        dragProgress = (offset.x / size.width).coerceIn(0f, 1f)
+                        onValueChange(dragProgress * maxValue)
                     },
                     onDragEnd = {
                         isDragging = false
@@ -363,18 +362,17 @@ fun CustomProgressBar(
                         onValueChangeFinished()
                     }
                 ) { change, _ ->
-                    val newFraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                    dragProgress = newFraction
-                    onValueChange(newFraction * maxValue)
+                    change.consume()
+                    dragProgress = (change.position.x / size.width).coerceIn(0f, 1f)
+                    onValueChange(dragProgress * maxValue)
                 }
             }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = { offset ->
                         isDragging = true
-                        val newFraction = (offset.x / size.width).coerceIn(0f, 1f)
-                        dragProgress = newFraction
-                        onValueChange(newFraction * maxValue)
+                        dragProgress = (offset.x / size.width).coerceIn(0f, 1f)
+                        onValueChange(dragProgress * maxValue)
                         tryAwaitRelease()
                         isDragging = false
                         onValueChangeFinished()

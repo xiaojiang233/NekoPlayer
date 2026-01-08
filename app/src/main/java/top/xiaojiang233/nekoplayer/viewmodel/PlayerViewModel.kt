@@ -270,30 +270,44 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
 
     private suspend fun readEmbeddedLyrics(uri: android.net.Uri): List<LyricLine> {
         val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
-        return try {
-            // Copy to temp file to read tags
-            val tempFile = File.createTempFile("temp_lyrics", ".mp3", context.cacheDir)
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                tempFile.outputStream().use { output ->
-                    input.copyTo(output)
+        return withContext(Dispatchers.IO) {
+            try {
+                // Check if URI is accessible
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    if (pfd.statSize <= 0) return@withContext emptyList<LyricLine>()
                 }
-            }
 
-            org.jaudiotagger.tag.TagOptionSingleton.getInstance().isAndroid = true
-            val audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
-            val tag = audioFile.tag
-            val lyricsContent = tag?.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
+                // Copy to temp file to read tags
+                val tempFile = File.createTempFile("temp_lyrics", ".mp3", context.cacheDir)
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
 
-            tempFile.delete()
+                    if (tempFile.length() > 0) {
+                        org.jaudiotagger.tag.TagOptionSingleton.getInstance().isAndroid = true
+                        val audioFile = org.jaudiotagger.audio.AudioFileIO.read(tempFile)
+                        val tag = audioFile.tag
+                        val lyricsContent = tag?.getFirst(org.jaudiotagger.tag.FieldKey.LYRICS)
 
-            if (!lyricsContent.isNullOrBlank()) {
-                LyricsParser.parse(lyricsContent)
-            } else {
+                        if (!lyricsContent.isNullOrBlank()) {
+                            LyricsParser.parse(lyricsContent)
+                        } else {
+                            emptyList()
+                        }
+                    } else {
+                        emptyList()
+                    }
+                } finally {
+                    if (tempFile.exists()) tempFile.delete()
+                }
+            } catch (e: Exception) {
+                // Log and ignore
+                android.util.Log.e("PlayerViewModel", "Error reading embedded lyrics", e)
                 emptyList()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
         }
     }
 
@@ -365,17 +379,21 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
         // Try to get cover URI from multiple sources
         var coverUri = if (s.coverUrl?.startsWith("/") == true) {
             File(s.coverUrl).toUri()
+        } else if (s.coverUrl?.startsWith("file://") == true) {
+            s.coverUrl.toUri()
         } else if (s.coverUrl?.startsWith("http") == true) {
-            s.coverUrl?.toUri()
+            s.coverUrl.toUri()
+        } else if (s.coverUrl?.startsWith("content://") == true) {
+            s.coverUrl.toUri()
         } else {
             null
         }
 
-        // For local music (platform="local") or when no http cover, try to find downloaded cover file
-        if (s.platform == "local" || coverUri == null) {
+        // For local music (platform="local") or when no cover URI resolved yet, try to find downloaded cover file
+        if (coverUri == null || s.platform == "local") {
             try {
-                val safeTitle = s.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                val safeArtist = s.artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val safeTitle = s.title.replace(Regex("[\\\\/:*?\"<>]"), "_")
+                val safeArtist = s.artist.replace(Regex("[\\\\/:*?\"<>]"), "_")
                 val fileNameBase = "$safeTitle - $safeArtist".trim()
                 val context = top.xiaojiang233.nekoplayer.NekoPlayerApplication.getAppContext()
                 val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
@@ -523,4 +541,3 @@ class PlayerViewModel(private val musicServiceConnection: MusicServiceConnection
         }
     }
 }
-

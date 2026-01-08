@@ -22,7 +22,33 @@ class AudioCoverFetcher(
     override suspend fun fetch(): FetchResult? {
         val context = options.context
 
-        // Try Jaudiotagger for local files first
+        // Strategy:
+        // 1. Try to find sidecar .jpg in DIRECTORY_MUSIC based on metadata
+        // 2. Try MediaMetadataRetriever (embedded or system-provided)
+        // 3. Try Jaudiotagger for local files (more details)
+
+        val metadata = getMetadataFromUri(context, uri)
+        if (metadata != null) {
+            val (title, artist) = metadata
+            val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            val safeArtist = artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            val fileNameBase = "$safeTitle - $safeArtist".trim()
+            val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+            val sidecarCover = File(musicDir, "$fileNameBase.jpg")
+
+            if (sidecarCover.exists()) {
+                val bitmap = BitmapFactory.decodeFile(sidecarCover.absolutePath)
+                if (bitmap != null) {
+                    return DrawableResult(
+                        drawable = BitmapDrawable(context.resources, bitmap),
+                        isSampled = false,
+                        dataSource = DataSource.DISK
+                    )
+                }
+            }
+        }
+
+        // Try Jaudiotagger for local files first (fallback)
         if (uri.scheme == "file") {
             try {
                 val path = uri.path
@@ -56,7 +82,13 @@ class AudioCoverFetcher(
             if (uri.scheme == "file") {
                 retriever.setDataSource(uri.path)
             } else {
-                retriever.setDataSource(context, uri)
+                // For content URIs, take extra care
+                try {
+                    retriever.setDataSource(context, uri)
+                } catch (e: Exception) {
+                    // This is where status 0x80000000 often happens if file is pending or inaccessible
+                    return null
+                }
             }
             val coverBytes = retriever.embeddedPicture
             if (coverBytes != null) {
@@ -75,6 +107,26 @@ class AudioCoverFetcher(
         } finally {
             retriever.release()
         }
+    }
+
+    private fun getMetadataFromUri(context: Context, uri: Uri): Pair<String, String>? {
+        if (uri.scheme != "content") return null
+
+        try {
+            val cursor = context.contentResolver.query(uri, arrayOf(
+                android.provider.MediaStore.Audio.Media.TITLE,
+                android.provider.MediaStore.Audio.Media.ARTIST
+            ), null, null, null)
+
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val title = c.getString(0) ?: "Unknown"
+                    val artist = c.getString(1) ?: "Unknown"
+                    return Pair(title, artist)
+                }
+            }
+        } catch (_: Exception) { }
+        return null
     }
 
     class Factory : Fetcher.Factory<Uri> {

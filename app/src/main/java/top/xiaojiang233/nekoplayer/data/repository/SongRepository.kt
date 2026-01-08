@@ -1,46 +1,48 @@
 package top.xiaojiang233.nekoplayer.data.repository
 
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.ContentUris
-import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
-import android.webkit.MimeTypeMap
-import android.widget.Toast
+import android.util.Log
 import androidx.core.content.ContextCompat
-import java.io.File
-import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.jaudiotagger.audio.AudioFileIO
-import org.jaudiotagger.tag.FieldKey
-import org.jaudiotagger.tag.TagOptionSingleton
-import org.jaudiotagger.tag.images.ArtworkFactory
 import top.xiaojiang233.nekoplayer.NekoPlayerApplication
 import top.xiaojiang233.nekoplayer.data.model.OnlineSong
+import top.xiaojiang233.nekoplayer.service.DownloadService
+import java.io.File
+import java.io.ObjectStreamException
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import top.xiaojiang233.nekoplayer.R
 
 @OptIn(ExperimentalSerializationApi::class)
+@SuppressLint("StaticFieldLeak")
 object SongRepository {
+
+    private const val TAG = "SongRepository"
+    private val context = NekoPlayerApplication.getAppContext()
 
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
     }
 
-    private val downloadsDir = File(NekoPlayerApplication.getAppContext().filesDir, "downloads")
+    private val downloadsDir = File(context.filesDir, "downloads")
     private val localSongsOrderFile = File(downloadsDir, "order.json")
     private val hiddenSongsFile = File(downloadsDir, "hidden.json")
     private val localSongsMetadataFile = File(downloadsDir, "local_metadata.json")
@@ -49,17 +51,26 @@ object SongRepository {
     const val EXTRA_SONG_ID = "song_id"
     const val EXTRA_STATUS = "status"
 
-    @kotlinx.serialization.Serializable
+    @Serializable
     data class LocalSongMetadata(
         val songId: String,
         val hasCover: Boolean = false,
-        val hasLyrics: Boolean = false
+        val hasLyrics: Boolean = false,
+        val title: String? = null,
+        val artist: String? = null,
+        val platform: String? = null,
+        val album: String? = null
     )
 
+    @Serializable
     sealed class DownloadState : java.io.Serializable {
-        object None : DownloadState()
+        object None : DownloadState() {
+            private fun readResolve(): Any = None
+        }
         data class Downloading(val progress: Float) : DownloadState()
-        object Downloaded : DownloadState()
+        object Downloaded : DownloadState() {
+            private fun readResolve(): Any = Downloaded
+        }
         data class Failed(val message: String) : DownloadState()
     }
 
@@ -67,7 +78,7 @@ object SongRepository {
     val downloadState = _downloadState.asStateFlow()
 
     private val downloadStatusReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: android.content.Intent?) {
+        override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_DOWNLOAD_STATUS) {
                 val songId = intent.getStringExtra(EXTRA_SONG_ID) ?: return
                 val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -85,115 +96,149 @@ object SongRepository {
     }
 
     init {
-        // Register broadcast receiver for download status updates
         val filter = IntentFilter(ACTION_DOWNLOAD_STATUS)
         ContextCompat.registerReceiver(
-            NekoPlayerApplication.getAppContext(),
+            context,
             downloadStatusReceiver,
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        if (!downloadsDir.exists()) downloadsDir.mkdirs()
     }
 
-    fun createDownloadStatusIntent(songId: String, state: DownloadState): android.content.Intent {
-        return android.content.Intent(ACTION_DOWNLOAD_STATUS).apply {
+    fun createDownloadStatusIntent(songId: String, state: DownloadState): Intent {
+        return Intent(ACTION_DOWNLOAD_STATUS).apply {
+            setPackage(context.packageName)
             putExtra(EXTRA_SONG_ID, songId)
             putExtra(EXTRA_STATUS, state)
         }
     }
 
-    private fun saveLocalSongsOrder(songs: List<OnlineSong>) {
-        if (!downloadsDir.exists()) downloadsDir.mkdirs()
-        val ids = songs.map { it.id }
-        localSongsOrderFile.writeText(json.encodeToString(ids))
-    }
-
+    // --- Local Songs Order ---
     private fun getLocalSongsOrder(): List<String> {
         if (!localSongsOrderFile.exists()) return emptyList()
         return try {
             json.decodeFromString<List<String>>(localSongsOrderFile.readText())
         } catch (e: Exception) {
+            Log.e(TAG, "Error reading song order", e)
             emptyList()
         }
     }
 
+    fun updateLocalSongsOrder(songs: List<OnlineSong>) {
+        try {
+            val ids = songs.map { it.id }
+            localSongsOrderFile.writeText(json.encodeToString(ids))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving song order", e)
+        }
+    }
+
+    // --- Hidden Songs ---
     private fun getHiddenSongs(): MutableSet<String> {
         if (!hiddenSongsFile.exists()) return mutableSetOf()
         return try {
             json.decodeFromString<Set<String>>(hiddenSongsFile.readText()).toMutableSet()
         } catch (e: Exception) {
+            Log.e(TAG, "Error reading hidden songs", e)
             mutableSetOf()
         }
     }
 
-    private fun saveHiddenSongs(hiddenSongs: Set<String>) {
-        if (!downloadsDir.exists()) downloadsDir.mkdirs()
-        hiddenSongsFile.writeText(json.encodeToString(hiddenSongs))
-    }
-
     fun setHiddenSongs(hiddenSongIds: Set<String>) {
-        saveHiddenSongs(hiddenSongIds)
+        try {
+            hiddenSongsFile.writeText(json.encodeToString(hiddenSongIds))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving hidden songs", e)
+        }
     }
 
+    fun addLocalSong(uri: Uri) {
+        if (uri.scheme == "content") {
+            try {
+                val id = ContentUris.parseId(uri)
+                if (id != -1L) {
+                    val hidden = getHiddenSongs()
+                    if (hidden.remove(id.toString())) {
+                        setHiddenSongs(hidden)
+                    }
+                }
+            } catch (e: Exception) {
+                // Not a valid ID-based URI or parse failed
+            }
+        }
+
+        if (uri.scheme == "file" && uri.path != null) {
+             android.media.MediaScannerConnection.scanFile(context, arrayOf(uri.path), null, null)
+        }
+    }
+
+    fun deleteSong(song: OnlineSong) {
+        // Add to hidden songs
+        val hidden = getHiddenSongs()
+        hidden.add(song.id)
+        setHiddenSongs(hidden)
+
+        try {
+            val url = song.songUrl ?: return
+            if (url.startsWith("content://")) {
+                 context.contentResolver.delete(Uri.parse(url), null, null)
+            } else if (url.startsWith("file://")) {
+                val path = Uri.parse(url).path
+                if (path != null) {
+                    val file = File(path)
+                    if (file.exists()) file.delete()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting song file", e)
+        }
+    }
+
+    // --- Metadata ---
     private fun getLocalSongsMetadata(): Map<String, LocalSongMetadata> {
         if (!localSongsMetadataFile.exists()) return emptyMap()
         return try {
             val list = json.decodeFromString<List<LocalSongMetadata>>(localSongsMetadataFile.readText())
             list.associateBy { it.songId }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Error reading metadata", e)
             emptyMap()
         }
     }
 
-    private fun saveLocalSongMetadata(metadata: LocalSongMetadata) {
+    fun saveLocalSongMetadata(metadata: LocalSongMetadata) {
         val allMetadata = getLocalSongsMetadata().toMutableMap()
         val existing = allMetadata[metadata.songId]
         val merged = LocalSongMetadata(
             songId = metadata.songId,
             hasCover = metadata.hasCover || (existing?.hasCover == true),
-            hasLyrics = metadata.hasLyrics || (existing?.hasLyrics == true)
+            hasLyrics = metadata.hasLyrics || (existing?.hasLyrics == true),
+            title = metadata.title ?: existing?.title,
+            artist = metadata.artist ?: existing?.artist,
+            platform = metadata.platform ?: existing?.platform,
+            album = metadata.album ?: existing?.album
         )
         allMetadata[metadata.songId] = merged
 
-        if (!downloadsDir.exists()) downloadsDir.mkdirs()
-        localSongsMetadataFile.writeText(json.encodeToString(allMetadata.values.toList()))
-    }
-
-    suspend fun saveEmbeddedCoverForMediaUri(mediaUri: Uri, fileNameBase: String, songId: String): Boolean {
-        val context = NekoPlayerApplication.getAppContext()
-        return try {
-            val retriever = android.media.MediaMetadataRetriever()
-            retriever.setDataSource(context, mediaUri)
-            val pic = retriever.embeddedPicture
-            retriever.release()
-            if (pic != null) {
-                val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
-                if (musicDir != null && !musicDir.exists()) musicDir.mkdirs()
-                val coverFile = File(musicDir, "$fileNameBase.jpg")
-                try {
-                    val bitmap = BitmapFactory.decodeByteArray(pic, 0, pic.size)
-                    if (bitmap != null) {
-                        coverFile.outputStream().use { out ->
-                            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
-                        }
-                        bitmap.recycle()
-                        saveLocalSongMetadata(LocalSongMetadata(songId = songId, hasCover = true, hasLyrics = false))
-                        return true
-                    }
-                } catch (_: Exception) { }
-            }
-            false
-        } catch (_: Exception) {
-            false
+        try {
+            localSongsMetadataFile.writeText(json.encodeToString(allMetadata.values.toList()))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving metadata", e)
         }
     }
 
+    // --- Queries ---
     fun getLocalSongs(): List<OnlineSong> {
-        val context = NekoPlayerApplication.getAppContext()
-        val songs = mutableListOf<OnlineSong>()
+        return queryMediaStore()
+    }
 
-        android.util.Log.d("SongRepository", "getLocalSongs called")
+    fun getAllMediaStoreMusic(): List<OnlineSong> {
+        return queryMediaStore(filterHidden = false)
+    }
+
+    private fun queryMediaStore(filterHidden: Boolean = true): List<OnlineSong> {
+        val songs = mutableListOf<OnlineSong>()
 
         val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
@@ -201,19 +246,21 @@ object SongRepository {
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         }
 
-        android.util.Log.d("SongRepository", "Using collection URI: $collection")
-
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DATA
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
 
+        val metadata = getLocalSongsMetadata()
+        val musicDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+        val hiddenSongs = if (filterHidden) getHiddenSongs() else emptySet()
+
         try {
-            android.util.Log.d("SongRepository", "Starting MediaStore query")
             context.contentResolver.query(
                 collection,
                 projection,
@@ -221,7 +268,6 @@ object SongRepository {
                 null,
                 "${MediaStore.Audio.Media.TITLE} ASC"
             )?.use { cursor ->
-                android.util.Log.d("SongRepository", "Query successful, cursor count: ${cursor.count}")
                 val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                 val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -229,297 +275,115 @@ object SongRepository {
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
+                    if (filterHidden && id.toString() in hiddenSongs) continue
+
                     val title = cursor.getString(titleCol)
                     val artist = cursor.getString(artistCol)
                     val album = cursor.getString(albumCol)
                     val contentUri = ContentUris.withAppendedId(collection, id)
 
+                    val meta = metadata[id.toString()]
+
+                    var coverUrl = contentUri.toString()
+                    if (meta?.hasCover == true) {
+                        val safeTitle = (meta.title ?: title).replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                        val safeArtist = (meta.artist ?: artist).replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                        val fileNameBase = "$safeTitle - $safeArtist".trim()
+                        val coverFile = File(musicDir, "$fileNameBase.jpg")
+                        if (coverFile.exists()) {
+                            coverUrl = Uri.fromFile(coverFile).toString()
+                        }
+                    }
+
                     songs.add(OnlineSong(
                         id = id.toString(),
-                        title = title ?: "Unknown",
-                        artist = artist ?: "Unknown",
-                        album = album,
-                        platform = "local",
+                        title = meta?.title ?: title ?: "Unknown",
+                        artist = meta?.artist ?: artist ?: "Unknown",
+                        album = meta?.album ?: album,
+                        platform = meta?.platform ?: "local",
                         songUrl = contentUri.toString(),
-                        coverUrl = contentUri.toString(),
+                        coverUrl = coverUrl,
                         lyricUrl = null
                     ))
                 }
-                android.util.Log.d("SongRepository", "Processed ${songs.size} songs from cursor")
-            } ?: run {
-                android.util.Log.e("SongRepository", "Query returned null cursor")
             }
         } catch (e: Exception) {
-            android.util.Log.e("SongRepository", "Error querying MediaStore", e)
-            e.printStackTrace()
-        }
-
-        android.util.Log.d("SongRepository", "Total songs before filtering: ${songs.size}")
-
-        val hiddenSongs = getHiddenSongs()
-        android.util.Log.d("SongRepository", "Hidden songs count: ${hiddenSongs.size}")
-        val visibleSongs = songs.filter { it.id !in hiddenSongs }
-
-        android.util.Log.d("SongRepository", "Visible songs after filtering: ${visibleSongs.size}")
-
-        val metadata = getLocalSongsMetadata()
-        val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
-
-        val songsWithMetadata = visibleSongs.map { song ->
-            val meta = metadata[song.id]
-            if (meta != null && meta.hasCover) {
-                val safeTitle = song.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                val safeArtist = song.artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                val fileNameBase = "$safeTitle - $safeArtist".trim()
-                val coverFile = File(musicDir, "$fileNameBase.jpg")
-
-                if (coverFile.exists()) {
-                    song.copy(coverUrl = Uri.fromFile(coverFile).toString())
-                } else {
-                    song
-                }
-            } else {
-                song
-            }
+            Log.e(TAG, "Error querying MediaStore", e)
         }
 
         val order = getLocalSongsOrder()
         if (order.isEmpty()) {
-            return songsWithMetadata.sortedBy { it.title }
+            return songs.sortedBy { it.title }
         }
 
-        val songMap = songsWithMetadata.associateBy { it.id }
+        val songMap = songs.associateBy { it.id }
         val orderedSongs = order.mapNotNull { songMap[it] }
-        val unorderedSongs = songsWithMetadata.filter { it.id !in order }.sortedBy { it.title }
+        val unorderedSongs = songs.filter { it.id !in order }.sortedBy { it.title }
 
         return orderedSongs + unorderedSongs
     }
 
-    fun updateLocalSongsOrder(songs: List<OnlineSong>) {
-        saveLocalSongsOrder(songs)
-    }
-
-    fun getAllMediaStoreMusic(): List<OnlineSong> {
-        val context = NekoPlayerApplication.getAppContext()
-        val songs = mutableListOf<OnlineSong>()
-
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        }
-
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM
-        )
-
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-
-        try {
-            context.contentResolver.query(
-                collection,
-                projection,
-                selection,
-                null,
-                "${MediaStore.Audio.Media.TITLE} ASC"
-            )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idCol)
-                    val title = cursor.getString(titleCol)
-                    val artist = cursor.getString(artistCol)
-                    val album = cursor.getString(albumCol)
-                    val contentUri = ContentUris.withAppendedId(collection, id)
-
-                    songs.add(OnlineSong(
-                        id = id.toString(),
-                        title = title ?: "Unknown",
-                        artist = artist ?: "Unknown",
-                        album = album,
-                        platform = "local",
-                        songUrl = contentUri.toString(),
-                        coverUrl = contentUri.toString(),
-                        lyricUrl = null
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        return songs.sortedBy { it.title }
-    }
-
     suspend fun updateSongMetadata(song: OnlineSong, selectedMatch: OnlineSong) {
-        val context = NekoPlayerApplication.getAppContext()
-
         withContext(Dispatchers.IO) {
             try {
                 val safeTitle = song.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
                 val safeArtist = song.artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
                 val fileNameBase = "$safeTitle - $safeArtist".trim()
+                val musicDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: return@withContext
 
-                val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
+                if (!musicDir.exists()) musicDir.mkdirs()
 
                 var hasLyrics = false
-                var hasCover = false
-
-                if (!selectedMatch.lyricUrl.isNullOrBlank() && selectedMatch.lyricUrl.startsWith("http")) {
+                if (!selectedMatch.lyricUrl.isNullOrBlank()) {
                     try {
-                        val lyricsContent = URL(selectedMatch.lyricUrl).readText()
-                        val lrcFile = File(musicDir, "$fileNameBase.lrc")
-                        lrcFile.writeText(lyricsContent)
-                        hasLyrics = true
-                    } catch (_: Exception) { }
-                }
-
-                if (!selectedMatch.coverUrl.isNullOrBlank()) {
-                    try {
-                        val coverFile = File(musicDir, "$fileNameBase.jpg")
-                        val url = URL(selectedMatch.coverUrl)
-                        val connection = url.openConnection() as HttpURLConnection
-                        connection.instanceFollowRedirects = true
-                        connection.connect()
-                        if (connection.responseCode in 200..299) {
-                            connection.inputStream.use { input ->
-                                val bitmap = BitmapFactory.decodeStream(input)
-                                if (bitmap != null) {
-                                    coverFile.outputStream().use { output ->
-                                        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, output)
-                                    }
-                                    bitmap.recycle()
-                                    hasCover = true
-                                }
-                            }
+                        val lyricsContent = downloadUrlText(selectedMatch.lyricUrl)
+                        if (lyricsContent.isNotEmpty()) {
+                            val lyricFile = File(musicDir, "$fileNameBase.lrc")
+                            lyricFile.writeText(lyricsContent)
+                            hasLyrics = true
                         }
-                    } catch (_: Exception) { }
-                }
-
-                if (hasLyrics || hasCover) {
-                    val metadata = LocalSongMetadata(
-                        songId = song.id,
-                        hasCover = hasCover,
-                        hasLyrics = hasLyrics
-                    )
-                    saveLocalSongMetadata(metadata)
-                }
-
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, context.getString(R.string.config_imported_success).replace("Configuration imported", "Metadata saved"), Toast.LENGTH_SHORT).show()
-                }
-
-            } catch (e: Exception) {
-                e.printStackTrace()
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Error saving metadata: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    fun deleteSong(song: OnlineSong) {
-        val context = NekoPlayerApplication.getAppContext()
-        try {
-            val uri = Uri.parse(song.songUrl)
-            try {
-                context.contentResolver.delete(uri, null, null)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                val hidden = getHiddenSongs()
-                hidden.add(song.id)
-                saveHiddenSongs(hidden)
-            }
-
-            _downloadState.value = _downloadState.value.toMutableMap().apply { remove(song.id) }
-
-            val musicDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC)
-            val safeTitle = song.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            val safeArtist = song.artist.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            val fileNameBase = "$safeTitle - $safeArtist".trim()
-            val lyricFile = File(musicDir, "$fileNameBase.lrc")
-            if (lyricFile.exists()) {
-                lyricFile.delete()
-            }
-            val coverFile = File(musicDir, "$fileNameBase.jpg")
-            if (coverFile.exists()) {
-                coverFile.delete()
-            }
-
-            val allMetadata = getLocalSongsMetadata().toMutableMap()
-            allMetadata.remove(song.id)
-            if (!downloadsDir.exists()) downloadsDir.mkdirs()
-            localSongsMetadataFile.writeText(json.encodeToString(allMetadata.values.toList()))
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun clearCache() {
-        val context = NekoPlayerApplication.getAppContext()
-        val httpCacheDirectory = File(context.cacheDir, "http-cache")
-        if (httpCacheDirectory.exists()) {
-            httpCacheDirectory.deleteRecursively()
-        }
-
-        val imageCacheDirectory = File(context.cacheDir, "image_cache")
-        if (imageCacheDirectory.exists()) {
-            imageCacheDirectory.deleteRecursively()
-        }
-    }
-
-    suspend fun addLocalSong(uri: Uri) {
-        // Import a song from URI into MediaStore
-        val context = NekoPlayerApplication.getAppContext()
-        val resolver = context.contentResolver
-
-        try {
-            val fileName = uri.pathSegments.lastOrNull() ?: "${System.currentTimeMillis()}.mp3"
-
-            val contentValues = ContentValues().apply {
-                put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-                put(MediaStore.Audio.Media.IS_PENDING, 1)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/NekoMusic")
-                }
-            }
-
-            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            } else {
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            }
-
-            val itemUri = resolver.insert(collection, contentValues)
-
-            if (itemUri != null) {
-                resolver.openOutputStream(itemUri).use { out ->
-                    resolver.openInputStream(uri)?.use { input ->
-                        input.copyTo(out!!)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to download lyrics", e)
                     }
                 }
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    contentValues.clear()
-                    contentValues.put(MediaStore.Audio.Media.IS_PENDING, 0)
-                    resolver.update(itemUri, contentValues, null, null)
+                var hasCover = false
+                if (!selectedMatch.coverUrl.isNullOrBlank()) {
+                    try {
+                        val bitmap = downloadBitmap(selectedMatch.coverUrl)
+                        if (bitmap != null) {
+                            val coverFile = File(musicDir, "$fileNameBase.jpg")
+                            coverFile.outputStream().use {
+                                bitmap.compress(Bitmap.CompressFormat.JPEG, 70, it)
+                            }
+                            bitmap.recycle()
+                            hasCover = true
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to download cover", e)
+                    }
                 }
+
+                saveLocalSongMetadata(
+                    LocalSongMetadata(
+                        songId = song.id,
+                        title = selectedMatch.title,
+                        artist = selectedMatch.artist,
+                        album = selectedMatch.album,
+                        hasCover = hasCover,
+                        hasLyrics = hasLyrics
+                    )
+                )
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error updating song metadata", e)
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
     fun downloadSong(song: OnlineSong) {
-        val context = NekoPlayerApplication.getAppContext()
-        val intent = android.content.Intent(context, top.xiaojiang233.nekoplayer.service.DownloadService::class.java).apply {
-            putExtra("EXTRA_SONG", song)
+        val intent = Intent(context, DownloadService::class.java).apply {
+            putExtra("song", song)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
@@ -528,9 +392,165 @@ object SongRepository {
         }
     }
 
+    private fun downloadUrlText(urlString: String): String {
+        var connection: HttpURLConnection? = null
+        try {
+            var url = URL(urlString)
+            connection = url.openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = true
+
+            var redirects = 0
+            while (connection!!.responseCode in 300..399) {
+                val newUrl = connection.getHeaderField("Location") ?: break
+                connection.disconnect()
+                url = URL(newUrl)
+                connection = url.openConnection() as HttpURLConnection
+                redirects++
+                if (redirects > 5) break
+            }
+
+            return connection.inputStream.reader().use { it.readText() }
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun downloadBitmap(urlString: String): Bitmap? {
+        var connection: HttpURLConnection? = null
+        try {
+            var url = URL(urlString)
+            connection = url.openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = true
+
+            var redirects = 0
+            while (connection!!.responseCode in 300..399) {
+                val newUrl = connection.getHeaderField("Location") ?: break
+                connection.disconnect()
+                url = URL(newUrl)
+                connection = url.openConnection() as HttpURLConnection
+                redirects++
+                if (redirects > 5) break
+            }
+
+            return connection.inputStream.use { BitmapFactory.decodeStream(it) }
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
     fun saveSongs(songs: List<OnlineSong>) {
-        // This method is a no-op for MediaStore-based implementation
-        // Songs are automatically saved to MediaStore when downloaded/imported
-        android.util.Log.d("SongRepository", "saveSongs called with ${songs.size} songs (no-op for MediaStore)")
+        updateLocalSongsOrder(songs)
+
+        // Also try to restore basic metadata if possible from the song objects
+        // This is a best-effort since OnlineSong mixes computed/loaded data
+        val currentMetadata = getLocalSongsMetadata().toMutableMap()
+        var changed = false
+
+        songs.forEach { song ->
+            if (song.platform != "local") return@forEach // Only for local songs usually
+
+            // If we have custom cover/lyrics in the backup (indicated by URLs usually pointing to local storage or http)
+            // we might want to preserve that knowledge in metadata.
+            // However, file paths might have changed if on a different device.
+            // But let's assume we are restoring on same device or compatible one.
+
+            val existing = currentMetadata[song.id]
+            val hasCover = song.coverUrl != song.songUrl // If cover URL is different from song URL (content://...), it likely has a custom cover
+            val hasLyrics = !song.lyricUrl.isNullOrEmpty()
+
+            if (existing == null || existing.hasCover != hasCover || existing.hasLyrics != hasLyrics) {
+                currentMetadata[song.id] = LocalSongMetadata(
+                    songId = song.id,
+                    hasCover = hasCover || (existing?.hasCover == true),
+                    hasLyrics = hasLyrics || (existing?.hasLyrics == true),
+                    title = song.title,
+                    artist = song.artist,
+                    album = song.album,
+                    platform = song.platform
+                )
+                changed = true
+            }
+        }
+
+        if (changed) {
+            try {
+                localSongsMetadataFile.writeText(json.encodeToString(currentMetadata.values.toList()))
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving restored metadata", e)
+            }
+        }
+    }
+
+    fun clearCache() {
+        try {
+            if (downloadsDir.exists()) {
+                val files = downloadsDir.listFiles()
+                files?.forEach { file ->
+                    // Keep important json files, delete temporary files if any
+                    // Actually, "cache" usually means temporary data.
+                    // But here downloadsDir seems to hold metadata and config too.
+                    // Maybe we should delete the 'downloads' content that are actual media?
+                    // But SongRepository stores 'metadata' in downloadsDir.
+
+                    // If the user means "Clear Cache" in settings, typically it means coil image cache or temp lyrics/mp3s.
+                    // Coil cache is separate.
+                    // If we downloaded temp files...
+                    // We don't seem to have a dedicated temp folder tracked here, but we write .lrc and .jpg to musicDir.
+
+                    // Let's assume clearCache clears internal app cache directory
+                    context.cacheDir.deleteRecursively()
+
+                    // And maybe keep metadata?
+                    // If the user wants to reset app logic, deleting metadata is fine?
+                    // "Clear Cache" usually doesn't delete user data like playlists/metadata options.
+                    // But if it's "Clear Data"...
+
+                    // Given the context of "NekoPlayer", maybe it refers to cached images/lyrics?
+                    // But those are in ExternalFilesDir.
+
+                    // Let's safe-clear standard cache.
+                }
+            }
+            context.cacheDir.deleteRecursively()
+            context.codeCacheDir.deleteRecursively()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing cache", e)
+        }
+    }
+
+    suspend fun saveEmbeddedCoverForMediaUri(mediaUri: Uri, fileNameBase: String, songId: String): Boolean {
+        // Implementation similar to what was likely there before or suitable for this purpose
+        return withContext(Dispatchers.IO) {
+            try {
+                val retriever = android.media.MediaMetadataRetriever()
+                retriever.setDataSource(context, mediaUri)
+                val pic = retriever.embeddedPicture
+                retriever.release()
+
+                if (pic != null) {
+                    val musicDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+                    if (musicDir != null) {
+                        if (!musicDir.exists()) musicDir.mkdirs()
+                        val coverFile = File(musicDir, "$fileNameBase.jpg")
+                        val bitmap = BitmapFactory.decodeByteArray(pic, 0, pic.size)
+
+                        if (bitmap != null) {
+                            coverFile.outputStream().use { out ->
+                                bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
+                            }
+                            bitmap.recycle()
+
+                            // Update metadata to reflect we now have a cover
+                            saveLocalSongMetadata(LocalSongMetadata(songId = songId, hasCover = true))
+                            return@withContext true
+                        }
+                    }
+                }
+                false
+            } catch (e: Exception) {
+                Log.e(TAG, "Error extracting embedded cover", e)
+                false
+            }
+        }
     }
 }
