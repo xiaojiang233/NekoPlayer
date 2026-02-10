@@ -1,3 +1,5 @@
+# 由于[TuneFreeNext](https://tunefree.fun/)已经停止提供api服务，本项目停止维护，请前往新项目https://github.com/xiaojiang233/NekoMusic
+---
 # NekoPlayer
 
 <p align="center">
